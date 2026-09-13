@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: neighborhood-walk-audit
+    runtime: node
+    plan: 0.5c-512mb
+    buildCommand: npm ci
+    startCommand: npm run db:migrate && npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: DATABASE_URL
+        fromDatabase:
+          name: neighborhood-walk-audit-db
+          property: connectionString
+      - key: COOKIE_SECRET
+        generateValue: true
+      - key: APP_ORIGIN
+        sync: false
+      - key: OVERPASS_URL
+        value: https://overpass-api.de/api/interpreter
+      - key: TRUST_PROXY
+        value: "true"
+
+databases:
+  - name: neighborhood-walk-audit-db
+    plan: 0.1c-256mb
+    databaseName: walk_audit
+    user: walk_audit

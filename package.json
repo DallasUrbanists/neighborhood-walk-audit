@@ -1,0 +1,27 @@
+{
+  "name": "neighborhood-walk-audit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A mobile-first collaborative neighborhood walk audit application",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "db:migrate": "node scripts/migrate.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@turf/turf": "^7.2.0",
+    "bulma": "^1.0.4",
+    "compression": "^1.8.1",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "leaflet": "^1.9.4",
+    "pg": "^8.16.3"
+  }
+}

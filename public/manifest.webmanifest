@@ -1,0 +1,10 @@
+{
+  "name": "Neighborhood Walk Audit",
+  "short_name": "Walk Audit",
+  "description": "Coordinate neighborhood-wide walk audits, one street at a time.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#081821",
+  "theme_color": "#f5c842",
+  "icons": []
+}

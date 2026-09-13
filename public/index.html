@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#f5c842">
+    <meta name="description" content="Coordinate neighborhood-wide walk audits, one street at a time.">
+    <title>Neighborhood Walk Audit</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="stylesheet" href="/vendor/bulma/bulma.min.css">
+    <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+    <link rel="stylesheet" href="/styles.css?v=3">
+  </head>
+  <body>
+    <div id="offline-banner" class="offline-banner" role="status" hidden>
+      Offline — your audit answers will stay on this device and sync when service returns.
+    </div>
+    <header class="app-header">
+      <button id="brand-button" class="brand-button" type="button" aria-label="Go to dashboard">
+        <span class="brand-mark" aria-hidden="true">⌁</span>
+        <span class="brand-copy"><strong>Neighborhood</strong><span>Walk Audit</span></span>
+      </button>
+      <div class="header-actions">
+        <span id="sync-status" class="sync-status" role="status"></span>
+        <button id="theme-toggle" class="icon-button" type="button" aria-label="Switch to dark mode" title="Switch color theme">
+          <span aria-hidden="true">☾</span>
+        </button>
+        <button id="account-button" class="account-button" type="button" hidden></button>
+      </div>
+    </header>
+    <main id="app" tabindex="-1">
+      <section class="loading-screen" aria-live="polite">
+        <span class="loader-dot" aria-hidden="true"></span>
+        <p>Opening your walk audit…</p>
+      </section>
+    </main>
+    <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+    <div id="modal-root"></div>
+    <script src="/vendor/leaflet/leaflet.js"></script>
+    <script src="/app.js?v=5"></script>
+  </body>
+</html>
