@@ -2,9 +2,11 @@ services:
   - type: web
     name: neighborhood-walk-audit
     runtime: node
+    region: oregon
     plan: 0.5c-512mb
     buildCommand: npm ci
-    startCommand: npm run db:migrate && npm start
+    preDeployCommand: npm run db:migrate
+    startCommand: npm start
     healthCheckPath: /api/health
     envVars:
       - key: NODE_VERSION
@@ -24,6 +26,7 @@ services:
 
 databases:
   - name: neighborhood-walk-audit-db
+    region: oregon
     plan: 0.1c-256mb
     databaseName: walk_audit
     user: walk_audit
