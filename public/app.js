@@ -398,9 +398,8 @@ function renderLogin() {
   const returnTo = safeReturnPath(new URLSearchParams(location.search).get('return'));
   appRoot.innerHTML = `<section class="login-shell page-shell">
     <div class="panel-card login-panel">
-      <p class="eyebrow">Volunteer sign-in</p>
-      <h1 class="title">Pick up where your neighborhood left off.</h1>
-      <p class="subtitle">Enter your email to organize a study or contribute to one. No password is required in this early version.</p>
+      <h1 class="title">Volunteer sign-in</h1>
+      <p class="subtitle">Enter your email to organize a study or contribute to one.</p>
       <form id="login-form" novalidate>
         <div class="field">
           <label class="label" for="login-email">Email address</label>
@@ -450,9 +449,9 @@ function renderLogin() {
 function renderNameStep(email, returnTo) {
   appRoot.innerHTML = `<section class="login-shell page-shell">
     <div class="panel-card login-panel">
-      <p class="eyebrow">One last detail</p>
-      <h1 class="title">What should volunteers call you?</h1>
-      <p class="subtitle">This name will appear next to the audits you submit.</p>
+      <p class="eyebrow">Welcome first-timer!</p>
+      <h1 class="title">What's your name?</h1>
+      <p class="subtitle">This will appear next to the audits you submit.</p>
       <form id="name-form" novalidate>
         <div class="field">
           <label class="label" for="login-name">Your name</label>
