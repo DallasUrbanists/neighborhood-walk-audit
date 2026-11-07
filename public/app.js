@@ -161,6 +161,13 @@ function replaceTileLayer(map) {
 }
 
 function createMap(elementId, options = {}) {
+  const renderer = L.canvas();
+  // Leaflet 1.9 can retain an already queued redraw when a background map is
+  // removed. Guard the callback itself as well as cancelling work on teardown.
+  const redraw = renderer._redraw;
+  renderer._redraw = function () {
+    if (this._map && this._ctx) redraw.call(this);
+  };
   const map = L.map(elementId, {
     zoomControl: false,
     attributionControl: true,
@@ -169,6 +176,7 @@ function createMap(elementId, options = {}) {
     dragging: true,
     bounceAtZoomLimits: false,
     preferCanvas: true,
+    renderer,
     ...options
   });
   replaceTileLayer(map);
@@ -179,9 +187,20 @@ function createMap(elementId, options = {}) {
 
 function destroyMaps() {
   for (const map of state.activeMaps) {
-    try { map.remove(); } catch (_error) { /* map already removed */ }
+    try {
+      // Remove paths before their canvas so teardown cannot enqueue a redraw
+      // against a renderer whose drawing context has already been destroyed.
+      map.eachLayer(layer => { if (layer instanceof L.Path) map.removeLayer(layer); });
+      map.remove();
+    } catch (_error) { /* map already removed */ }
   }
   state.activeMaps = [];
+}
+
+function scheduleMapResize(map) {
+  requestAnimationFrame(() => {
+    if (state.activeMaps.includes(map)) map.invalidateSize();
+  });
 }
 
 function boundsFromFeature(feature) {
@@ -319,7 +338,7 @@ async function renderRoute() {
 
   try {
     if (path === '/' || path === '/login') {
-      if (path === '/' && state.user) return renderDashboard(token);
+      if (path === '/' && state.user) return await renderDashboard(token);
       return renderLogin();
     }
     if (path === '/studies/new') {
@@ -332,18 +351,18 @@ async function renderRoute() {
     if (match) {
       if (!state.user) return navigate(`/login?return=${encodeURIComponent(path)}`, { replace: true });
       if (pathChanged) state.auditWizard = null;
-      return renderAuditWizard(Number(match[1]), Number(match[2]), token);
+      return await renderAuditWizard(Number(match[1]), Number(match[2]), token);
     }
     match = path.match(/^\/studies\/(\d+)\/audits\/new$/);
     if (match) {
       if (!state.user) return navigate(`/login?return=${encodeURIComponent(path)}`, { replace: true });
       if (pathChanged) state.auditWizard = null;
-      return renderAuditWizard(Number(match[1]), null, token);
+      return await renderAuditWizard(Number(match[1]), null, token);
     }
     match = path.match(/^\/studies\/(\d+)\/audits\/(\d+)$/);
-    if (match) return renderAuditDetail(Number(match[1]), Number(match[2]), token);
+    if (match) return await renderAuditDetail(Number(match[1]), Number(match[2]), token);
     match = path.match(/^\/studies\/(\d+)$/);
-    if (match) return renderStudyPage(Number(match[1]), token);
+    if (match) return await renderStudyPage(Number(match[1]), token);
 
     throw Object.assign(new Error('Page not found.'), { status: 404 });
   } catch (error) {
@@ -822,7 +841,7 @@ function initializeBoundaryMap() {
   });
   document.querySelector('#boundary-finish').addEventListener('click', createStudyFromWizard);
   redraw();
-  requestAnimationFrame(() => map.invalidateSize());
+  scheduleMapResize(map);
 }
 
 function openStudyLoadingModal() {
@@ -990,6 +1009,8 @@ async function renderStudyPage(studyId, token) {
   });
   document.querySelector('#generate-report')?.addEventListener('click', async (event) => {
     const button = event.currentTarget;
+    if (button.disabled) return;
+    button.disabled = true;
     button.classList.add('is-loading');
     try {
       const result = await api(`/api/studies/${study.id}/reports`, { method: 'POST', body: {} });
@@ -1000,6 +1021,7 @@ async function renderStudyPage(studyId, token) {
     } catch (error) {
       showToast(error.message, 'error');
     } finally {
+      button.disabled = false;
       button.classList.remove('is-loading');
     }
   });
@@ -1068,7 +1090,7 @@ function initializeStudyMap(study, audits) {
 
   const bounds = areaLayer.getBounds();
   if (bounds.isValid()) map.fitBounds(bounds, { padding: [24, 24] });
-  requestAnimationFrame(() => map.invalidateSize());
+  scheduleMapResize(map);
 }
 
 function auditCacheKey(studyId, editingAuditId) {
@@ -1176,15 +1198,20 @@ async function renderAuditWizardScreen() {
 
 async function persistAuditDraft(updates) {
   const wizard = state.auditWizard;
+  clearTimeout(wizard.autosaveTimer);
   Object.assign(wizard.draft, structuredClone(updates));
   writeAuditCache();
   if (sharedApi) {
+    const saving = structuredClone(wizard.draft);
     syncStatus.textContent = 'Saving…';
     try {
       const result = await api(`/api/drafts/${wizard.draft.id}`, { method: 'PATCH', body: updates });
-      wizard.draft = result.draft;
+      // A response to an earlier save must not replace text entered while it ran.
+      const newer = Object.fromEntries(Object.entries(wizard.draft)
+        .filter(([key, value]) => key !== 'version' && JSON.stringify(value) !== JSON.stringify(saving[key])));
+      wizard.draft = { ...result.draft, ...newer };
       writeAuditCache();
-      syncStatus.textContent = 'Saved';
+      syncStatus.textContent = Object.keys(newer).length ? 'Unsaved changes' : 'Saved';
       return result.draft;
     } catch (error) {
       syncStatus.textContent = 'Not saved — keep this page open';
@@ -1421,13 +1448,16 @@ function initializeAuditLocationMap() {
       document.querySelector('#location-next').disabled = true;
       return;
     }
+    const changedFeature = wizard.draft.geojson?.properties?.id !== match.feature.properties.id;
     wizard.selectedFeature = structuredClone(match.feature);
     wizard.draft.geojson = structuredClone(match.feature);
     wizard.draft.locationGps = sharedApi
       ? { latitude: match.latlng[0], longitude: match.latlng[1] }
       : { latitude: latlng.lat, longitude: latlng.lng };
-    wizard.draft.locationDescription = match.feature.properties?.description
-      || (wizard.draft.type === 'intersection' ? 'Selected intersection' : 'Selected street segment');
+    if (changedFeature || !wizard.draft.locationDescription) {
+      wizard.draft.locationDescription = match.feature.properties?.description || match.feature.properties?.name
+        || (wizard.draft.type === 'intersection' ? 'Selected intersection' : 'Selected street segment');
+    }
     highlighted = L.geoJSON(match.feature, {
       style: { color: '#d3263e', weight: 9, opacity: 1 },
       pointToLayer: (_feature, pointLatLng) => L.circleMarker(pointLatLng, {
@@ -1469,7 +1499,7 @@ function initializeAuditLocationMap() {
       enableHighAccuracy: true, timeout: 10_000, maximumAge: 15_000
     });
   }
-  requestAnimationFrame(() => map.invalidateSize());
+  scheduleMapResize(map);
 }
 
 function renderAuditDescriptionStep() {
@@ -1553,7 +1583,7 @@ function initializeFeaturePreviewMap(elementId, area, feature, locationGps) {
       radius: 5, color: '#711625', weight: 2, fillColor: '#ffffff', fillOpacity: 1
     }).addTo(map);
   }
-  requestAnimationFrame(() => map.invalidateSize());
+  scheduleMapResize(map);
 }
 
 async function ensureWorksheets() {
@@ -1691,7 +1721,32 @@ async function renderQuestionStep() {
       }
     }));
   }
+  function rememberAnswer() {
+    const value = readPromptAnswer(prompt);
+    const answers = { ...(wizard.draft.answers || {}) };
+    if (value === null || (Array.isArray(value) && !value.length)) delete answers[prompt.id];
+    else answers[prompt.id] = value;
+    wizard.draft.answers = answers;
+    writeAuditCache();
+    if (sharedApi) {
+      clearTimeout(wizard.autosaveTimer);
+      syncStatus.textContent = 'Unsaved changes';
+      wizard.autosaveTimer = setTimeout(async () => {
+        if (state.auditWizard !== wizard) return;
+        try { await persistAuditDraft({ answers: structuredClone(wizard.draft.answers) }); }
+        catch (error) {
+          if (state.auditWizard !== wizard) return;
+          const errorBox = document.querySelector('#question-error');
+          if (errorBox) { errorBox.textContent = error.message; errorBox.hidden = false; }
+          else showToast(error.message, 'error');
+        }
+      }, 700);
+    }
+  }
+  document.querySelector('#prompt-answer')?.addEventListener('input', rememberAnswer);
+  document.querySelectorAll('input[name="prompt-answer"]').forEach(input => input.addEventListener('change', rememberAnswer));
   document.querySelector('#question-back').addEventListener('click', () => {
+    rememberAnswer();
     if (wizard.questionIndex > 0) wizard.questionIndex -= 1;
     else wizard.step = 4;
     renderAuditWizardScreen();

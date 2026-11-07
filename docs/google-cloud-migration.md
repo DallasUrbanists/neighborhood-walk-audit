@@ -64,7 +64,13 @@ The required live journey passed on November 7, 2026, within the two-hour launch
 
 The live smoke test left a clearly labeled synthetic study, audit, and report, all with ID `1`. Their content explicitly identifies them as migration verification, not a field observation. No production study was deleted. The smoke-test account was signed out after verification.
 
+## Google sign-in follow-up (November 7, 2026)
+
+The Google popup initially failed with `auth/internal-error`: the browser's CSP blocked Firebase Auth's `https://apis.google.com/js/api.js` loader. Added only `https://apis.google.com` to `script-src` and deployed Hosting release `sites/dallasurbanists-walk-audit/releases/1794079107382000`. After reloading the attached browser, Google authentication succeeded and reached first-time contributor profile setup. The user's profile form was left for them to complete; no profile was created on their behalf. App Check token acquisition and the protected profile lookup also passed after reload (404: profile not registered yet); the earlier App Check 403 did not recur.
+
 ## Deferred work
+
+The subsequent [user journey rehearsals](./user-journey-rehearsals.md) cover all ten deployed frontend journeys and record seven fixes, live evidence and scope limits. The latest frontend release is `sites/dallasurbanists-walk-audit/releases/1794081341446000`. Study creation exposed unreliable default Overpass endpoints; shared API revision `urbanists-cloud-api-server-00115-sxg` now tries the alternate provider already used by the shared service first, with `overpass-api.de` as fallback. This was a configuration-only API change. Frontend fixes cover map lifecycle, worksheet answer retention/autosave, custom descriptions, report double-clicks and asynchronous route error handling. Both synthetic test accounts were signed out after verification; synthetic study 2 and its observations/reports remain for inspection.
 
 These tasks are outside the expedited launch. Estimates are planning ranges, not completed work.
 
