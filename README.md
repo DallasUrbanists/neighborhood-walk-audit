@@ -4,7 +4,7 @@ A mobile-first web application for organizing a neighborhood-wide walk audit. Or
 
 ## Live shared API deployment
 
-The current public application is [Neighborhood Walk Audit](https://dallasurbanists-walk-audit.web.app), hosted on Firebase Hosting in `dallasurbanists-idea-map-dev`. It uses the existing [Dallas Urbanists shared API](https://api.dallasurbanists.org/docs/) and its Firebase authentication and Cloud SQL database. The retained Render application and its historical records are separate.
+The current public application is [Neighborhood Walk Audit](https://dallasurbanists-walk-audit.web.app), hosted on Firebase Hosting in `dallasurbanists-idea-map-dev`. The custom domain [audit.mapmy.town](https://audit.mapmy.town) is configured; Firebase was still provisioning its HTTPS certificate on November 7, 2026. It uses the existing [Dallas Urbanists shared API](https://api.dallasurbanists.org/docs/) and its Firebase authentication and Cloud SQL database. The retained Render application and its historical records are separate.
 
 The shared frontend supports Google or email/password authentication, contributor registration, personal dashboards, studies, worksheets, online draft autosave/resume, audit submissions and edits, and report capture. Unsaved shared-backend answers remain in the current page; reconnect before saving or submitting. The legacy offline queue is disabled for shared-backend users.
 

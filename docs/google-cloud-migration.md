@@ -42,7 +42,9 @@ No dual writing, browser-side legacy import, cookie transfer, or email-based own
 
 ## Deployment and access configuration
 
-The public hostname and its `firebaseapp.com` alias were added to the existing Firebase authorized sign-in domains and reCAPTCHA allowed domains. The exact two frontend origins were added to shared API CORS. CSP includes the SDK's actual `content-firebaseappcheck.googleapis.com` exchange endpoint.
+The public hostname, its `firebaseapp.com` alias, and `audit.mapmy.town` are in the existing Firebase authorized sign-in domains and reCAPTCHA allowed domains. All three frontend origins are allowed by shared API CORS; the custom-domain update created Cloud Run revision `urbanists-cloud-api-server-00116-gfr`. CSP includes the SDK's actual `content-firebaseappcheck.googleapis.com` exchange endpoint.
+
+Namecheap BasicDNS has a CNAME from `audit.mapmy.town` to `dallasurbanists-walk-audit.web.app` and a Firebase certificate-validation TXT record under `_acme-challenge.audit`. Firebase reported the custom domain's host and ownership active on November 7, 2026, while HTTPS certificate validation was still in progress. The existing root and `www` records continue to point to the separate GitHub site.
 
 To release frontend changes, run `npm ci`, `npm run build`, and `python scripts/deploy-hosting.py` after `gcloud auth login`. The deployment script fixes the Google Cloud project and site explicitly. Firebase CLI uses a separate login and is not needed by this path.
 
@@ -81,7 +83,7 @@ These tasks are outside the expedited launch. Estimates are planning ranges, not
 | High | Full database/auth/browser regression coverage | 1–2 days. Real PostgreSQL concurrency, provider failures, multi-account privacy, pagination at scale, mobile devices, Firebase Google popup flow and authorization boundaries. The launch smoke covers the required journey only. |
 | Medium | Study/report/audit management UI | 1–2 days. Add report narrative/title/membership editing, study editing and explicit destructive controls. Study deletion must clearly state that everyone's associated observations, drafts, reports and thumbnail are permanently deleted. No deletion controls were added for launch. |
 | Medium | Routine deployment and monitoring | 0.5–1 day. Automate tested frontend/API releases, release provenance and basic alerts using existing infrastructure. Review provider reliability and database sizing for observed traffic. |
-| Medium | Custom domain and legacy-link transition | 2–4 hours plus DNS time. Choose the public domain, configure Firebase/Auth/App Check/CORS/CSP, and decide how old numeric deep links and device drafts should transition. Do not blanket-redirect old IDs to unrelated new records. |
+| Medium | Legacy-link transition | 2–4 hours after the legacy-link decision. Decide how old numeric deep links and device drafts should transition. Do not blanket-redirect old IDs to unrelated new records. |
 | Medium | Backup and recovery policy | Separate future effort. Backups and rehearsals were explicitly excluded from this launch; no recovery guarantee is established by it. |
 | Low | Remove obsolete standalone code | 2–4 hours after legacy retention/import decisions. Retire email-cookie auth, standalone SQL persistence, demo fallback, duplicate generation and Render deployment configuration without breaking retained historical access. |
 | Low | Basemap styling and PWA polish | 2–4 hours. Restore separate dark/light basemaps if desired and design safe caching; private requests must remain outside public caches. |
