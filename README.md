@@ -2,6 +2,25 @@
 
 A mobile-first web application for organizing a neighborhood-wide walk audit. Organizers draw one study boundary and share its link; volunteers can then audit individual street segments or intersections on their own schedules.
 
+## Live shared API deployment
+
+The current public application is [Neighborhood Walk Audit](https://dallasurbanists-walk-audit.web.app), hosted on Firebase Hosting in `dallasurbanists-idea-map-dev`. It uses the existing [Dallas Urbanists shared API](https://api.dallasurbanists.org/docs/) and its Firebase authentication and Cloud SQL database. The retained Render application and its historical records are separate.
+
+The shared frontend supports Google or email/password authentication, contributor registration, personal dashboards, studies, worksheets, online draft autosave/resume, audit submissions and edits, and report capture. Unsaved shared-backend answers remain in the current page; reconnect before saving or submitting. The legacy offline queue is disabled for shared-backend users.
+
+Build and publish the single release environment:
+
+```powershell
+npm ci
+npm run build
+gcloud auth login
+python scripts/deploy-hosting.py
+```
+
+[Public runtime configuration](config/shared.json) selects the shared backend explicitly. `API_ORIGIN` can override the API origin at build time; coordinate CORS, CSP and Firebase/App Check settings before changing it. The Firebase web configuration and reCAPTCHA site key are public browser settings, not server credentials. No server API key is shipped to the browser.
+
+See [migration status and deferred work](docs/google-cloud-migration.md). The standalone Node/PostgreSQL instructions below remain available for local development and the retained legacy backend; they are not the deployment path for the new public site.
+
 ## What is included
 
 - Email-only sign-in, with a name prompt for first-time users

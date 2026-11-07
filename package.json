@@ -8,6 +8,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "build": "node scripts/build-static.js",
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "db:migrate": "node scripts/migrate.js",

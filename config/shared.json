@@ -1,0 +1,15 @@
+{
+  "backend": "shared",
+  "demoMode": false,
+  "apiOrigin": "https://api.dallasurbanists.org",
+  "firebase": {
+    "apiKey": "AIzaSyC3bIA4RfgUnx8Rsfjkxx3HwltPS6o51S0",
+    "authDomain": "urbanists-mixer-slides-helper.firebaseapp.com",
+    "projectId": "urbanists-mixer-slides-helper",
+    "appId": "1:143738155808:web:385e87e73d547fdaf49d45"
+  },
+  "appCheck": {
+    "provider": "recaptcha-enterprise",
+    "siteKey": "6LfqKd0tAAAAAAPujelTV3ebYAt42yxapS30hwVB"
+  }
+}

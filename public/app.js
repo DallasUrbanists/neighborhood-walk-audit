@@ -1,6 +1,13 @@
 /* global L */
 'use strict';
 
+import { createSharedApi } from './shared-api.js';
+import { initializeFirebaseAuth } from './firebase-auth.js';
+
+let sharedApi = null;
+let firebaseAuth = null;
+const privateDraftCache = new Map();
+
 const appRoot = document.querySelector('#app');
 const modalRoot = document.querySelector('#modal-root');
 const toastRegion = document.querySelector('#toast-region');
@@ -92,6 +99,7 @@ function errorMarkup(message, retry = true) {
 }
 
 async function api(url, options = {}) {
+  if (sharedApi && url !== '/api/config') return sharedApi.request(url, options);
   let response;
   try {
     response = await fetch(url, {
@@ -138,6 +146,7 @@ function initializeTheme() {
 }
 
 function tileUrl() {
+  if (sharedApi) return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
   const style = currentTheme() === 'dark' ? 'dark_all' : 'light_all';
   return `/api/tiles/carto/${style}/{z}/{x}/{y}.png?v=${encodeURIComponent(state.config.cartoTileVersion)}`;
 }
@@ -147,7 +156,7 @@ function replaceTileLayer(map) {
   if (map._walkAuditTileLayer) map.removeLayer(map._walkAuditTileLayer);
   map._walkAuditTileLayer = L.tileLayer(tileUrl(), {
     maxZoom: 19,
-    attribution: '&copy; OpenStreetMap contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>'
+    attribution: sharedApi ? '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>' : '&copy; OpenStreetMap contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>'
   }).addTo(map);
 }
 
@@ -208,6 +217,7 @@ function safeReturnPath(value) {
 }
 
 function getOutbox() {
+  if (sharedApi) return [];
   try {
     const value = JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]');
     return Array.isArray(value) ? value : [];
@@ -226,6 +236,7 @@ function setOutbox(items) {
 }
 
 function enqueueRequest(item) {
+  if (sharedApi) throw new Error('Reconnect to save. Your unsaved answers remain on this screen.');
   const outbox = getOutbox();
   if (item.method === 'PATCH') {
     const existing = outbox.find((candidate) => candidate.method === 'PATCH' && candidate.url === item.url);
@@ -373,19 +384,55 @@ async function unregisterServiceWorkers() {
 
 async function boot() {
   try {
-    const [config, session] = await Promise.all([api('/api/config'), api('/api/session')]);
+    let config;
+    try {
+      const response = await fetch('/runtime-config.json', { cache: 'no-store' });
+      if (!response.ok) throw new Error('No static configuration');
+      config = await response.json();
+    } catch { config = await api('/api/config'); }
     state.config = config;
+    if (config.backend === 'shared') {
+      await unregisterServiceWorkers();
+      firebaseAuth = await initializeFirebaseAuth(config);
+      sharedApi = createSharedApi({ origin: config.apiOrigin, auth: firebaseAuth });
+      document.querySelector('#offline-banner').textContent = 'Offline — reconnect to save. Keep this page open to retain unsaved answers.';
+    }
+    const session = await api('/api/session');
     state.user = session.user;
+    if (sharedApi) {
+      let previousUid = firebaseAuth.user()?.uid || null;
+      firebaseAuth.onChange(async user => {
+        if ((user?.uid || null) === previousUid) return;
+        previousUid = user?.uid || null;
+        privateDraftCache.clear();
+        sharedApi.clear();
+        state.auditWizard = null;
+        state.studyWizard = null;
+        state.user = null;
+        updateHeader();
+        try {
+          state.user = await sharedApi.getProfile();
+          updateHeader();
+          if (user && !state.user) return renderNameStep(user.email || '', '/');
+          renderRoute();
+        } catch (error) { showToast(error.message, 'error'); }
+      });
+    }
     updateHeader();
     await flushOutbox();
   } catch (error) {
-    if (!error.isNetworkError) showToast(error.message, 'error');
+    appRoot.innerHTML = errorMarkup(`Unable to connect: ${error.message}`);
+    document.querySelector('#retry-route')?.addEventListener('click', () => location.reload());
+    document.querySelector('#error-home')?.addEventListener('click', () => location.reload());
+    return;
   }
-  renderRoute();
+  if (sharedApi && firebaseAuth.user() && !state.user) {
+    renderNameStep(firebaseAuth.user().email || '', safeReturnPath(new URLSearchParams(location.search).get('return')));
+  } else renderRoute();
   registerWebMcpTools();
 
   const isLocalHost = ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
-  if ('serviceWorker' in navigator && !isLocalHost) {
+  if ('serviceWorker' in navigator && !isLocalHost && !sharedApi) {
     navigator.serviceWorker.register('/service-worker.js').catch(() => {});
   } else {
     unregisterServiceWorkers();
@@ -394,7 +441,59 @@ async function boot() {
 
 boot();
 
+function renderFirebaseLogin() {
+  const returnTo = safeReturnPath(new URLSearchParams(location.search).get('return'));
+  appRoot.innerHTML = `<section class="login-shell page-shell"><div class="panel-card login-panel">
+    <h1 class="title">Volunteer sign-in</h1>
+    <p class="subtitle">Sign in to organize studies and save walk audits.</p>
+    <button id="google-sign-in" class="button is-primary is-fullwidth mb-5" type="button">Continue with Google</button>
+    <form id="firebase-login-form">
+      <div class="field"><label class="label" for="login-email">Email address</label>
+        <input class="input" id="login-email" type="email" autocomplete="email" required></div>
+      <div class="field"><label class="label" for="login-password">Password</label>
+        <input class="input" id="login-password" type="password" autocomplete="current-password" minlength="6" required></div>
+      <label class="checkbox mb-4"><input id="create-account" type="checkbox"> Create a new account</label>
+      <button class="button is-link is-fullwidth" type="submit">Continue with email</button>
+    </form>
+    <button class="button is-text mt-3" id="reset-password" type="button">Reset password</button>
+    <p id="firebase-login-error" class="error-notice mt-4" hidden></p>
+    <p class="help mt-5">Accounts from the previous website are separate. Use a verified sign-in provider to create your new profile.</p>
+  </div></section>`;
+  const errorBox = document.querySelector('#firebase-login-error');
+  async function signIn(work, button) {
+    button.disabled = true;
+    button.classList.add('is-loading');
+    errorBox.hidden = true;
+    try {
+      const user = await work();
+      const profile = await sharedApi.getProfile();
+      if (!profile) return renderNameStep(user.email || '', returnTo);
+      state.user = profile;
+      updateHeader();
+      navigate(returnTo || '/', { replace: true });
+    } catch (error) {
+      errorBox.textContent = error.message;
+      errorBox.hidden = false;
+    } finally { button.disabled = false; button.classList.remove('is-loading'); }
+  }
+  document.querySelector('#google-sign-in').addEventListener('click', event => signIn(() => firebaseAuth.google(), event.currentTarget));
+  document.querySelector('#firebase-login-form').addEventListener('submit', event => {
+    event.preventDefault();
+    signIn(() => firebaseAuth.email(document.querySelector('#login-email').value.trim(), document.querySelector('#login-password').value, document.querySelector('#create-account').checked), event.currentTarget.querySelector('button'));
+  });
+  document.querySelector('#reset-password').addEventListener('click', async () => {
+    try {
+      const email = document.querySelector('#login-email').value.trim();
+      if (!email) throw new Error('Enter your email address first.');
+      await firebaseAuth.resetPassword(email);
+      showToast('If this account exists, a password reset email is on its way.');
+    } catch (error) { errorBox.textContent = error.message; errorBox.hidden = false; }
+  });
+  pageReady();
+}
+
 function renderLogin() {
+  if (sharedApi) return renderFirebaseLogin();
   const returnTo = safeReturnPath(new URLSearchParams(location.search).get('return'));
   appRoot.innerHTML = `<section class="login-shell page-shell">
     <div class="panel-card login-panel">
@@ -476,8 +575,9 @@ function renderNameStep(email, returnTo) {
     submit.classList.add('is-loading');
     errorBox.hidden = true;
     try {
-      const result = await api('/api/session', { method: 'POST', body: { email, name: input.value } });
-      state.user = result.user;
+      state.user = sharedApi
+        ? await sharedApi.register(input.value)
+        : (await api('/api/session', { method: 'POST', body: { email, name: input.value } })).user;
       updateHeader();
       navigate(returnTo || '/', { replace: true });
     } catch (error) {
@@ -530,6 +630,17 @@ async function renderDashboard(token) {
   document.querySelector('#empty-start-study')?.addEventListener('click', () => navigate('/studies/new'));
   document.querySelector('#sign-out').addEventListener('click', async () => {
     await api('/api/session', { method: 'DELETE' });
+    privateDraftCache.clear();
+    state.auditWizard = null;
+    state.studyWizard = null;
+    state.currentStudyPayload = null;
+    if (sharedApi) {
+      sharedApi.clear();
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith('walkAuditDraft:') || key.startsWith('walkAuditOutbox:')) localStorage.removeItem(key);
+      }
+      await unregisterServiceWorkers();
+    }
     state.user = null;
     updateHeader();
     navigate('/login', { replace: true });
@@ -719,9 +830,9 @@ function openStudyLoadingModal() {
     <div class="modal-card-custom" tabindex="-1">
       <span class="loader-dot" aria-hidden="true"></span>
       <h2 class="title is-3 mt-4" id="loading-title">Building your study map</h2>
-      <p>This can take a minute while OpenStreetMap identifies every auditable street and intersection.</p>
+      <p>This can take up to two minutes while OpenStreetMap identifies auditable streets and intersections.</p>
       <div class="loading-phases" aria-live="polite">
-        <div class="loading-phase is-active"><span class="phase-indicator"></span><span>Saving the study boundary</span></div>
+        <div class="loading-phase is-active"><span class="phase-indicator"></span><span>Preparing the study boundary</span></div>
         <div class="loading-phase"><span class="phase-indicator"></span><span>Finding streets and intersections</span></div>
         <div class="loading-phase"><span class="phase-indicator"></span><span>Drawing the study thumbnail</span></div>
       </div>
@@ -743,7 +854,8 @@ function openStudyLoadingModal() {
 
 async function createStudyFromWizard() {
   const wizard = state.studyWizard;
-  if (wizard.vertices.length < 3) return;
+  if (wizard.vertices.length < 3 || wizard.creating) return;
+  wizard.creating = true;
   const coordinates = [...wizard.vertices, wizard.vertices[0]];
   const area = { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [coordinates] } };
   const closeModal = openStudyLoadingModal();
@@ -756,6 +868,7 @@ async function createStudyFromWizard() {
     state.studyWizard = null;
     navigate(`/studies/${result.study.id}?created=1`, { replace: true });
   } catch (error) {
+    wizard.creating = false;
     closeModal();
     wizard.error = error.message;
     const errorBox = document.querySelector('#boundary-error');
@@ -959,10 +1072,11 @@ function initializeStudyMap(study, audits) {
 }
 
 function auditCacheKey(studyId, editingAuditId) {
-  return `walkAuditDraft:v1:${state.user?.id || 'guest'}:${studyId}:${editingAuditId || 'new'}`;
+  return `walkAuditDraft:${sharedApi ? `shared:${state.config.apiOrigin}` : 'v1'}:${state.user?.id || 'guest'}:${studyId}:${editingAuditId || 'new'}`;
 }
 
 function readAuditCache(key) {
+  if (sharedApi) return privateDraftCache.get(key) || null;
   try {
     return JSON.parse(localStorage.getItem(key) || 'null');
   } catch (_error) {
@@ -972,6 +1086,10 @@ function readAuditCache(key) {
 
 function writeAuditCache() {
   const wizard = state.auditWizard;
+  if (sharedApi) {
+    if (wizard) privateDraftCache.set(wizard.cacheKey, { draftId: wizard.draft.id, draft: structuredClone(wizard.draft), step: wizard.step, questionIndex: wizard.questionIndex });
+    return;
+  }
   if (!wizard) return;
   localStorage.setItem(wizard.cacheKey, JSON.stringify({
     draftId: wizard.draft.id,
@@ -1000,6 +1118,9 @@ async function renderAuditWizard(studyId, editingAuditId, token) {
       } else {
         draft = cached.draft;
       }
+    }
+    if (!draft) {
+      if (sharedApi) draft = await sharedApi.resumeDraft(studyId, editingAuditId);
     }
     if (!draft) {
       if (!navigator.onLine) throw new Error('Reconnect once to start this audit. After it starts, every answer can be saved offline.');
@@ -1057,6 +1178,19 @@ async function persistAuditDraft(updates) {
   const wizard = state.auditWizard;
   Object.assign(wizard.draft, structuredClone(updates));
   writeAuditCache();
+  if (sharedApi) {
+    syncStatus.textContent = 'Saving…';
+    try {
+      const result = await api(`/api/drafts/${wizard.draft.id}`, { method: 'PATCH', body: updates });
+      wizard.draft = result.draft;
+      writeAuditCache();
+      syncStatus.textContent = 'Saved';
+      return result.draft;
+    } catch (error) {
+      syncStatus.textContent = 'Not saved — keep this page open';
+      throw error;
+    }
+  }
   const request = { method: 'PATCH', url: `/api/drafts/${wizard.draft.id}`, body: updates };
   if (!navigator.onLine) {
     enqueueRequest(request);
@@ -1289,7 +1423,9 @@ function initializeAuditLocationMap() {
     }
     wizard.selectedFeature = structuredClone(match.feature);
     wizard.draft.geojson = structuredClone(match.feature);
-    wizard.draft.locationGps = { latitude: latlng.lat, longitude: latlng.lng };
+    wizard.draft.locationGps = sharedApi
+      ? { latitude: match.latlng[0], longitude: match.latlng[1] }
+      : { latitude: latlng.lat, longitude: latlng.lng };
     wizard.draft.locationDescription = match.feature.properties?.description
       || (wizard.draft.type === 'intersection' ? 'Selected intersection' : 'Selected street segment');
     highlighted = L.geoJSON(match.feature, {
@@ -1443,7 +1579,7 @@ async function renderWorksheetStep() {
         <span><strong>${escapeHtml(worksheet.title)}</strong><br><span class="help">${escapeHtml(worksheet.description)}</span></span>
       </label>`).join('')}
     </div>
-    <p class="help mt-4">Digital adaptations based on the <a href="${escapeHtml(worksheets[0]?.sourceUrl || '#')}" target="_blank" rel="noopener">AARP Walk Audit Tool Kit worksheets</a>.</p>
+    <p class="help mt-4"><a href="${escapeHtml(worksheets[0]?.sourceUrl || '#')}" target="_blank" rel="noopener">${sharedApi ? 'Worksheet background and walking guidance' : 'AARP Walk Audit Tool Kit worksheets'}</a>.</p>
     <div id="worksheet-error" class="error-notice mt-3" hidden></div>
     <div class="wizard-actions">
       <button class="button is-light" id="worksheet-back" type="button">Back</button>
@@ -1537,7 +1673,7 @@ async function renderQuestionStep() {
     <h1 class="wizard-question">${escapeHtml(prompt.label)}</h1>
     ${prompt.help ? `<p class="wizard-help">${escapeHtml(prompt.help)}</p>` : ''}
     ${promptControl(prompt, answer)}
-    ${prompt.optional ? '<p class="help mt-3">Optional — you can leave this blank.</p>' : '<p class="help mt-3">You can skip any question by tapping Next without choosing an answer.</p>'}
+    ${prompt.optional ? '<p class="help mt-3">Optional — you can leave this blank.</p>' : `<p class="help mt-3">${sharedApi ? 'Choose an answer before continuing.' : 'You can skip any question by tapping Next without choosing an answer.'}</p>`}
     <div id="question-error" class="error-notice mt-3" hidden></div>
     <div class="wizard-actions">
       <button class="button is-light" id="question-back" type="button">Back</button>
@@ -1565,6 +1701,13 @@ async function renderQuestionStep() {
     button.classList.add('is-loading');
     const nextAnswers = { ...(wizard.draft.answers || {}) };
     const nextAnswer = readPromptAnswer(prompt);
+    if (sharedApi && !prompt.optional && nextAnswer === null) {
+      const errorBox = document.querySelector('#question-error');
+      errorBox.textContent = 'Please answer this question before continuing.';
+      errorBox.hidden = false;
+      button.classList.remove('is-loading');
+      return;
+    }
     if (nextAnswer === null || (Array.isArray(nextAnswer) && !nextAnswer.length)) delete nextAnswers[prompt.id];
     else nextAnswers[prompt.id] = nextAnswer;
     try {
@@ -1647,6 +1790,21 @@ async function submitAuditWizard(event) {
   const errorBox = document.querySelector('#review-error');
   button.classList.add('is-loading');
   errorBox.hidden = true;
+  if (sharedApi) {
+    button.disabled = true;
+    try {
+      await api(`/api/drafts/${wizard.draft.id}/submit`, { method: 'POST', body: {} });
+      privateDraftCache.delete(wizard.cacheKey);
+      state.auditWizard = null;
+      navigate(`/studies/${wizard.studyId}?${wizard.editingAuditId ? 'saved' : 'submitted'}=1`, { replace: true });
+    } catch (error) {
+      errorBox.textContent = error.message;
+      errorBox.hidden = false;
+      button.classList.remove('is-loading');
+      button.disabled = false;
+    }
+    return;
+  }
   const request = {
     method: 'POST',
     url: `/api/drafts/${wizard.draft.id}/submit`,
