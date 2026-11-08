@@ -867,7 +867,7 @@ function renderNewStudy() {
       <button class="button is-link" id="boundary-add" type="button">＋ Add corner</button>
       <button class="button is-primary" id="boundary-finish" type="button" disabled>Finished drawing</button>
     </div>
-    <div id="boundary-error" class="error-notice mt-3" ${wizard.error ? '' : 'hidden'}>${escapeHtml(wizard.error || '')}</div>`
+    <div id="boundary-error" class="error-notice mt-3" role="alert" ${wizard.error ? '' : 'hidden'}>${escapeHtml(wizard.error || '')}</div>`
   });
   initializeBoundaryMap();
   pageReady();
@@ -988,6 +988,10 @@ function locateMap(map, onSuccess) {
 function initializeBoundaryMap() {
   const wizard = state.studyWizard;
   const map = createMap('boundary-map', { scrollWheelZoom: true });
+  const errorBox = document.querySelector('#boundary-error');
+  const clearError = () => { errorBox.textContent = ''; errorBox.hidden = true; wizard.error = null; };
+  const showError = message => { errorBox.textContent = message; errorBox.hidden = false; };
+  const sameCorner = (a, b) => a[0] === b[0] && a[1] === b[1];
   let manuallyMoved = false;
   const fallback = [32.7767, -96.797];
   if (wizard.vertices.length) {
@@ -1024,6 +1028,7 @@ function initializeBoundaryMap() {
       marker.on('drag', (event) => {
         const latlng = event.target.getLatLng();
         wizard.vertices[index] = [latlng.lng, latlng.lat];
+        clearError();
         if (polygonLayer) polygonLayer.setLatLngs(wizard.vertices.map(([lng, lat]) => [lat, lng]));
       });
       markers.push(marker);
@@ -1040,16 +1045,24 @@ function initializeBoundaryMap() {
   document.querySelector('#boundary-locate').addEventListener('click', () => locateMap(map));
   document.querySelector('#boundary-add').addEventListener('click', () => {
     const center = map.getCenter();
-    wizard.vertices.push([center.lng, center.lat]);
+    const corner = [center.lng, center.lat];
+    if (wizard.vertices.some(existing => sameCorner(existing, corner))) {
+      showError('Move the map to a different location before adding another corner.');
+      return;
+    }
+    clearError();
+    wizard.vertices.push(corner);
     redraw();
     if (navigator.vibrate) navigator.vibrate(25);
   });
   document.querySelector('#boundary-undo').addEventListener('click', () => {
     wizard.vertices.pop();
+    clearError();
     redraw();
   });
   document.querySelector('#boundary-clear').addEventListener('click', () => {
     wizard.vertices = [];
+    clearError();
     redraw();
   });
   document.querySelector('#boundary-back').addEventListener('click', () => {
@@ -1057,6 +1070,11 @@ function initializeBoundaryMap() {
     renderNewStudy();
   });
   document.querySelector('#boundary-finish').addEventListener('click', async (event) => {
+    if (wizard.vertices.some((corner, index) => wizard.vertices.slice(0, index).some(existing => sameCorner(existing, corner)))) {
+      showError('Each corner must be in a different place. Drag or remove any overlapping corners.');
+      return;
+    }
+    clearError();
     if (!sharedApi) return createStudyFromWizard();
     const button = event.currentTarget;
     button.disabled = true;
