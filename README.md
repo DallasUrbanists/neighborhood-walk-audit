@@ -8,6 +8,8 @@ The current public application is [Neighborhood Walk Audit](https://dallasurbani
 
 The shared frontend supports Google or email/password authentication, contributor registration, personal dashboards, studies, worksheets, online draft autosave/resume, audit submissions and edits, and report capture. Unsaved shared-backend answers remain in the current page; reconnect before saving or submitting. The legacy offline queue is disabled for shared-backend users.
 
+The source also includes study-owned questionnaires for intersection, point, and routed street audits, an all-studies directory, and up to three optional photos per new audit. These changes require the matching additive shared-API migration and API release before the frontend is published; they are not a claim that the running site has been updated. Submitted audit types stay fixed, and existing single-edge street observations retain their locations until explicitly replaced.
+
 Build and publish the single release environment:
 
 ```powershell
@@ -23,17 +25,17 @@ See [migration status and deferred work](docs/google-cloud-migration.md). The st
 
 ## What is included
 
-- Email-only sign-in, with a name prompt for first-time users
-- A personal dashboard of organized and contributed studies
-- A two-step study wizard with touch-first boundary drawing
+- Firebase Google or email sign-in in shared mode, with a name prompt for first-time contributors; the retained standalone mode uses email-only sign-in
+- A dashboard grouping organized or contributed studies separately from other public studies in shared mode
+- Touch-first boundary drawing and study-owned questionnaire authoring in shared mode
 - OpenStreetMap street and intersection extraction through the Overpass API
 - Automatically generated PNG study thumbnails
 - Public, copyable study links
-- GPS-assisted audit location selection that snaps to the nearest mapped intersection or street segment
-- Type-filtered digital walk-audit worksheets based on AARP worksheet topics
+- GPS-assisted intersection, midblock point, and two-pin street-route selection in shared mode
+- Study-assigned questions based on a starter bank of AARP worksheet topics; the standalone mode retains its worksheet picker
 - One-question-at-a-time mobile forms with progress indicators
 - Database autosave after every completed step or question
-- offline drafts in `localStorage`, an ordered sync queue, and automatic reconnection sync
+- Online shared drafts with versioned autosave; the standalone mode retains its offline draft queue
 - Review and edit links before submission
 - Study progress, completed-location map overlays, audit history, audit details, and audit editing
 - On-demand report snapshots for study organizers

@@ -1,0 +1,1505 @@
+{
+  "version": "aarp-topics-v1",
+  "defaults": {
+    "intersection": [
+      "i-crosswalk-visible",
+      "i-controls-visible",
+      "i-curb-ramp",
+      "i-tactile-warning",
+      "i-crossing-time",
+      "common-walkability",
+      "common-improvements"
+    ],
+    "street-segment": [
+      "s-sidewalk-coverage",
+      "s-continuity",
+      "s-buffer",
+      "s-surface",
+      "s-obstacles",
+      "s-passing-space",
+      "common-walkability",
+      "common-improvements"
+    ],
+    "point": [
+      "p-surface",
+      "p-obstacles",
+      "p-shade",
+      "p-lighting",
+      "common-walkability",
+      "common-improvements"
+    ]
+  },
+  "questions": [
+    {
+      "id": "i-crosswalk-present",
+      "eligibleTypes": [
+        "intersection"
+      ],
+      "topic": "street crossings",
+      "prompt": {
+        "type": "choice",
+        "label": "Is there a designated pedestrian crossing here?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          6
+        ],
+        "topic": "street crossings",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "i-crosswalk-visible",
+      "eligibleTypes": [
+        "intersection"
+      ],
+      "topic": "marking visibility",
+      "prompt": {
+        "type": "choice",
+        "label": "Can pedestrians and drivers readily identify the crossing markings?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          6
+        ],
+        "topic": "marking visibility",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "i-controls-visible",
+      "eligibleTypes": [
+        "intersection"
+      ],
+      "topic": "lights and signs",
+      "prompt": {
+        "type": "choice",
+        "label": "Are the traffic controls easy to see from the crossing?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          6
+        ],
+        "topic": "lights and signs",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "i-pedestrian-signal",
+      "eligibleTypes": [
+        "intersection"
+      ],
+      "topic": "signal presence",
+      "prompt": {
+        "type": "choice",
+        "label": "Does this crossing have a signal for pedestrians?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          6
+        ],
+        "topic": "signal presence",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "i-signal-working",
+      "eligibleTypes": [
+        "intersection"
+      ],
+      "topic": "signal operation",
+      "prompt": {
+        "type": "choice",
+        "label": "Does the pedestrian signal appear to operate correctly?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          6
+        ],
+        "topic": "signal operation",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "i-push-button",
+      "eligibleTypes": [
+        "intersection"
+      ],
+      "topic": "signal controls",
+      "prompt": {
+        "type": "choice",
+        "label": "Can a pedestrian request a crossing using a working button?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          6
+        ],
+        "topic": "signal controls",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "i-audible-signal",
+      "eligibleTypes": [
+        "intersection"
+      ],
+      "topic": "audible prompts",
+      "prompt": {
+        "type": "choice",
+        "label": "Does the signal provide an audible crossing cue?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          6
+        ],
+        "topic": "audible prompts",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "i-crossing-time",
+      "eligibleTypes": [
+        "intersection"
+      ],
+      "topic": "crossing duration",
+      "prompt": {
+        "type": "choice",
+        "label": "Does the signal allow a comfortable amount of time to reach the far side?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          6
+        ],
+        "topic": "crossing duration",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "i-wait-time",
+      "eligibleTypes": [
+        "intersection"
+      ],
+      "topic": "waiting time",
+      "prompt": {
+        "type": "text",
+        "label": "Approximately how many seconds did you wait for a crossing opportunity?",
+        "required": false,
+        "maxLength": 2000
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          6
+        ],
+        "topic": "waiting time",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "i-curb-ramp",
+      "eligibleTypes": [
+        "intersection"
+      ],
+      "topic": "curb access",
+      "prompt": {
+        "type": "choice",
+        "label": "Can someone using wheels enter and leave the crossing by a usable ramp?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          3,
+          5
+        ],
+        "topic": "curb access",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "i-tactile-warning",
+      "eligibleTypes": [
+        "intersection"
+      ],
+      "topic": "tactile indicators",
+      "prompt": {
+        "type": "choice",
+        "label": "Are detectable warning surfaces present where the sidewalk meets the crossing?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          3,
+          5
+        ],
+        "topic": "tactile indicators",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "i-refuge",
+      "eligibleTypes": [
+        "intersection"
+      ],
+      "topic": "median or island",
+      "prompt": {
+        "type": "choice",
+        "label": "Is there a protected place to pause partway across this road?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          3
+        ],
+        "topic": "median or island",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "i-speed-compliance",
+      "eligibleTypes": [
+        "intersection"
+      ],
+      "topic": "speed observation",
+      "prompt": {
+        "type": "choice",
+        "label": "Do observed drivers appear to follow the posted speed limit?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          3
+        ],
+        "topic": "speed observation",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "i-lighting",
+      "eligibleTypes": [
+        "intersection"
+      ],
+      "topic": "pedestrian lighting",
+      "prompt": {
+        "type": "choice",
+        "label": "Does the crossing have lighting intended for people walking?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          7
+        ],
+        "topic": "pedestrian lighting",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "i-winter-crosswalk",
+      "eligibleTypes": [
+        "intersection"
+      ],
+      "topic": "winter crossing visibility",
+      "prompt": {
+        "type": "choice",
+        "label": "Is the crossing route visible and free of snow or ice?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          10
+        ],
+        "topic": "winter crossing visibility",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "i-winter-visibility",
+      "eligibleTypes": [
+        "intersection"
+      ],
+      "topic": "pedestrian visibility",
+      "prompt": {
+        "type": "choice",
+        "label": "Can drivers see people crossing despite snowbanks or other winter obstructions?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          10
+        ],
+        "topic": "pedestrian visibility",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "s-sidewalk-coverage",
+      "eligibleTypes": [
+        "street-segment"
+      ],
+      "topic": "sidewalk availability",
+      "prompt": {
+        "type": "choice",
+        "label": "Where are sidewalks available along this segment?",
+        "required": true,
+        "options": [
+          "Neither side",
+          "Some sections only",
+          "One side throughout",
+          "Both sides throughout",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          4,
+          5
+        ],
+        "topic": "sidewalk availability",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "s-continuity",
+      "eligibleTypes": [
+        "street-segment"
+      ],
+      "topic": "continuity",
+      "prompt": {
+        "type": "choice",
+        "label": "Can you follow the sidewalk for the full segment without an unexplained gap or ending?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          4,
+          5
+        ],
+        "topic": "continuity",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "s-buffer",
+      "eligibleTypes": [
+        "street-segment"
+      ],
+      "topic": "separation",
+      "prompt": {
+        "type": "choice",
+        "label": "Is there a curb, planted strip, or another buffer beside moving traffic?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          4,
+          5
+        ],
+        "topic": "separation",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "s-surface",
+      "eligibleTypes": [
+        "street-segment"
+      ],
+      "topic": "surface and repair",
+      "prompt": {
+        "type": "choice",
+        "label": "Is the walking surface even and in usable condition along the segment?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          4,
+          5
+        ],
+        "topic": "surface and repair",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "s-obstacles",
+      "eligibleTypes": [
+        "street-segment"
+      ],
+      "topic": "obstructions",
+      "prompt": {
+        "type": "choice",
+        "label": "Is the walking route clear of objects or growth that block passage?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          4,
+          5
+        ],
+        "topic": "obstructions",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "s-driveways",
+      "eligibleTypes": [
+        "street-segment"
+      ],
+      "topic": "driveway interruptions",
+      "prompt": {
+        "type": "choice",
+        "label": "Can you follow the sidewalk without repeated interruptions at driveways?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          4,
+          5
+        ],
+        "topic": "driveway interruptions",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "s-passing-space",
+      "eligibleTypes": [
+        "street-segment"
+      ],
+      "topic": "sidewalk width",
+      "prompt": {
+        "type": "choice",
+        "label": "Is there enough clear space for two people to pass comfortably?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          4,
+          5
+        ],
+        "topic": "sidewalk width",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "s-bike-lane",
+      "eligibleTypes": [
+        "street-segment"
+      ],
+      "topic": "bicycle lane",
+      "prompt": {
+        "type": "choice",
+        "label": "Is a designated bicycle lane present along this segment?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          4,
+          6
+        ],
+        "topic": "bicycle lane",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "s-shade",
+      "eligibleTypes": [
+        "street-segment"
+      ],
+      "topic": "shade trees",
+      "prompt": {
+        "type": "choice",
+        "label": "Is shade available along the walking route?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          7
+        ],
+        "topic": "shade trees",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "s-seating",
+      "eligibleTypes": [
+        "street-segment"
+      ],
+      "topic": "seating",
+      "prompt": {
+        "type": "choice",
+        "label": "Are there places to rest along this segment?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          7
+        ],
+        "topic": "seating",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "s-lighting",
+      "eligibleTypes": [
+        "street-segment"
+      ],
+      "topic": "lighting",
+      "prompt": {
+        "type": "choice",
+        "label": "Is pedestrian lighting provided along the route?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          7
+        ],
+        "topic": "lighting",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "s-greenery",
+      "eligibleTypes": [
+        "street-segment"
+      ],
+      "topic": "landscape upkeep",
+      "prompt": {
+        "type": "choice",
+        "label": "Does the landscaping along the route appear maintained?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          7
+        ],
+        "topic": "landscape upkeep",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "s-route-comfort",
+      "eligibleTypes": [
+        "street-segment"
+      ],
+      "topic": "travel-route impressions",
+      "prompt": {
+        "type": "choice",
+        "label": "Does this segment feel inviting to walk along?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          7
+        ],
+        "topic": "travel-route impressions",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "s-speed-compliance",
+      "eligibleTypes": [
+        "street-segment"
+      ],
+      "topic": "speed observation",
+      "prompt": {
+        "type": "choice",
+        "label": "Do observed drivers appear to follow the speed limit on this segment?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          4,
+          7
+        ],
+        "topic": "speed observation",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "s-winter-width",
+      "eligibleTypes": [
+        "street-segment"
+      ],
+      "topic": "width clearance",
+      "prompt": {
+        "type": "choice",
+        "label": "Has snow or ice been cleared across the usable width of the walkway?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          10
+        ],
+        "topic": "width clearance",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "s-winter-length",
+      "eligibleTypes": [
+        "street-segment"
+      ],
+      "topic": "length clearance",
+      "prompt": {
+        "type": "choice",
+        "label": "Has snow or ice been cleared for the full length of the walkway?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          10
+        ],
+        "topic": "length clearance",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "s-winter-treatment",
+      "eligibleTypes": [
+        "street-segment"
+      ],
+      "topic": "salting and sanding",
+      "prompt": {
+        "type": "choice",
+        "label": "Is there visible treatment for slippery winter surfaces?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          10
+        ],
+        "topic": "salting and sanding",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "s-transit-connection",
+      "eligibleTypes": [
+        "street-segment"
+      ],
+      "topic": "access to transit",
+      "prompt": {
+        "type": "choice",
+        "label": "Can pedestrians safely reach nearby transit stops from this segment?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          8
+        ],
+        "topic": "access to transit",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "p-passage",
+      "eligibleTypes": [
+        "point"
+      ],
+      "topic": "local walking access",
+      "prompt": {
+        "type": "choice",
+        "label": "Can a person using a mobility aid pass through this spot?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          3,
+          5
+        ],
+        "topic": "local walking access",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "p-surface",
+      "eligibleTypes": [
+        "point"
+      ],
+      "topic": "surface condition",
+      "prompt": {
+        "type": "choice",
+        "label": "Is the surface at this spot even and usable?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          3,
+          5
+        ],
+        "topic": "surface condition",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "p-obstacles",
+      "eligibleTypes": [
+        "point"
+      ],
+      "topic": "obstructions",
+      "prompt": {
+        "type": "choice",
+        "label": "Is this spot free of objects or vegetation that block walking?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          3,
+          5
+        ],
+        "topic": "obstructions",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "p-curb-ramp",
+      "eligibleTypes": [
+        "point"
+      ],
+      "topic": "curb access",
+      "prompt": {
+        "type": "choice",
+        "label": "Is a usable ramp available if a curb interrupts the route here?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          3,
+          5
+        ],
+        "topic": "curb access",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "p-tactile-warning",
+      "eligibleTypes": [
+        "point"
+      ],
+      "topic": "tactile indicators",
+      "prompt": {
+        "type": "choice",
+        "label": "Is there a detectable warning surface where the path enters traffic here?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          3,
+          5
+        ],
+        "topic": "tactile indicators",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "p-midblock-crossing",
+      "eligibleTypes": [
+        "point"
+      ],
+      "topic": "crossing presence",
+      "prompt": {
+        "type": "choice",
+        "label": "Is a pedestrian crossing provided at this spot?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          6
+        ],
+        "topic": "crossing presence",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "p-crossing-visible",
+      "eligibleTypes": [
+        "point"
+      ],
+      "topic": "crossing visibility",
+      "prompt": {
+        "type": "choice",
+        "label": "Can drivers and pedestrians readily identify the crossing at this spot?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          6
+        ],
+        "topic": "crossing visibility",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "p-shade",
+      "eligibleTypes": [
+        "point"
+      ],
+      "topic": "shade",
+      "prompt": {
+        "type": "choice",
+        "label": "Does this spot offer shade?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          7
+        ],
+        "topic": "shade",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "p-seating",
+      "eligibleTypes": [
+        "point"
+      ],
+      "topic": "seating",
+      "prompt": {
+        "type": "choice",
+        "label": "Is there a usable place to sit at this spot?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          7
+        ],
+        "topic": "seating",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "p-shelter",
+      "eligibleTypes": [
+        "point"
+      ],
+      "topic": "weather protection",
+      "prompt": {
+        "type": "choice",
+        "label": "Is shelter from the weather available here?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          7
+        ],
+        "topic": "weather protection",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "p-lighting",
+      "eligibleTypes": [
+        "point"
+      ],
+      "topic": "lighting",
+      "prompt": {
+        "type": "choice",
+        "label": "Is pedestrian lighting provided at this spot?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          7
+        ],
+        "topic": "lighting",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "p-transit-access",
+      "eligibleTypes": [
+        "point"
+      ],
+      "topic": "stop access",
+      "prompt": {
+        "type": "choice",
+        "label": "Can pedestrians safely approach and leave this transit stop?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          8
+        ],
+        "topic": "stop access",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "p-transit-protection",
+      "eligibleTypes": [
+        "point"
+      ],
+      "topic": "waiting-area protection",
+      "prompt": {
+        "type": "choice",
+        "label": "Are people waiting here protected from moving traffic?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          8
+        ],
+        "topic": "waiting-area protection",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "p-transit-seat",
+      "eligibleTypes": [
+        "point"
+      ],
+      "topic": "stop seating",
+      "prompt": {
+        "type": "choice",
+        "label": "Does this stop provide suitable seating for waiting riders?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          8
+        ],
+        "topic": "stop seating",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "p-transit-shelter",
+      "eligibleTypes": [
+        "point"
+      ],
+      "topic": "stop shelter",
+      "prompt": {
+        "type": "choice",
+        "label": "Does this stop provide shelter for waiting riders?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          8
+        ],
+        "topic": "stop shelter",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "p-transit-upkeep",
+      "eligibleTypes": [
+        "point"
+      ],
+      "topic": "stop maintenance",
+      "prompt": {
+        "type": "choice",
+        "label": "Does this stop appear clean and maintained?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          8
+        ],
+        "topic": "stop maintenance",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "p-transit-comfort",
+      "eligibleTypes": [
+        "point"
+      ],
+      "topic": "waiting comfort",
+      "prompt": {
+        "type": "choice",
+        "label": "Would you feel comfortable waiting at this stop?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          8
+        ],
+        "topic": "waiting comfort",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "p-winter-access",
+      "eligibleTypes": [
+        "point"
+      ],
+      "topic": "walkway and stop access",
+      "prompt": {
+        "type": "choice",
+        "label": "Is access through this spot clear of snowbanks, ice, or piled snow?",
+        "required": true,
+        "options": [
+          "Yes",
+          "No",
+          "Not applicable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          10
+        ],
+        "topic": "walkway and stop access",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "common-walkability",
+      "eligibleTypes": [
+        "intersection",
+        "street-segment",
+        "point"
+      ],
+      "topic": "overall assessment",
+      "prompt": {
+        "type": "choice",
+        "label": "Overall, how easy and comfortable is walking at this location?",
+        "required": true,
+        "options": [
+          "Easy and comfortable",
+          "Some difficulties",
+          "Difficult or uncomfortable",
+          "Not observed / unsure"
+        ]
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          11
+        ],
+        "topic": "overall assessment",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "common-improvements",
+      "eligibleTypes": [
+        "intersection",
+        "street-segment",
+        "point"
+      ],
+      "topic": "possible improvements",
+      "prompt": {
+        "type": "text",
+        "label": "What changes would most improve walking here?",
+        "required": false,
+        "maxLength": 2000
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          9
+        ],
+        "topic": "possible improvements",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "common-observations",
+      "eligibleTypes": [
+        "intersection",
+        "street-segment",
+        "point"
+      ],
+      "topic": "observation notes",
+      "prompt": {
+        "type": "text",
+        "label": "What other observations should the study team consider?",
+        "required": false,
+        "maxLength": 2000
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          5,
+          6,
+          7,
+          8,
+          11
+        ],
+        "topic": "observation notes",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    },
+    {
+      "id": "common-activities",
+      "eligibleTypes": [
+        "intersection",
+        "street-segment",
+        "point"
+      ],
+      "topic": "observed use",
+      "prompt": {
+        "type": "text",
+        "label": "What walking or rolling activities did you observe here?",
+        "required": false,
+        "maxLength": 2000
+      },
+      "sourceMetadata": {
+        "collectionUrl": "https://www.aarp.org/livable-communities/getting-around/aarp-walk-audit-worksheets-english.html",
+        "worksheetNumbers": [
+          2
+        ],
+        "topic": "observed use",
+        "adaptation": "Original digital adaptation of AARP worksheet topics; not an AARP endorsement."
+      }
+    }
+  ]
+}

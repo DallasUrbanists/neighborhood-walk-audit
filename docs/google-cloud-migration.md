@@ -1,5 +1,22 @@
 # Google Cloud migration
 
+## Pending questionnaire source release
+
+The study questionnaire, point, routed-street, directory, and photo changes in
+this checkout have not been deployed by this implementation. A later release
+must apply the shared API's additive `011_study_questionnaires_routes_photos.sql`
+after `009` and `010`, deploy the compatible API, smoke-check assignments and
+public worksheet reads, then publish the frontend. The migration pins each
+existing study's two types to its latest historical worksheet or the highest
+version of the explicit default slug; it leaves historical answers, geometry,
+and report captures in place. Missing required defaults abort the migration.
+
+Keep the additive data and invariant checks during rollback. Once point, route,
+or photo records exist, do not drop their storage, restore editable submitted
+types, or accept new single-pin street submissions merely to run an older
+frontend. Preserve the separately modified Overpass provider/transport code and
+exclude unrelated shared-API checkout changes from any future release.
+
 The single release environment is https://dallasurbanists-walk-audit.web.app in Google Cloud project `dallasurbanists-idea-map-dev`. The frontend calls `https://api.dallasurbanists.org/api/walk-audits`. Historical Render records remain in place; new Firebase accounts do not automatically claim them.
 
 ## Launch scope

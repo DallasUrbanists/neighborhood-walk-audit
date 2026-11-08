@@ -1,8 +1,9 @@
 /* global L */
 'use strict';
 
-import { createSharedApi } from './shared-api.js';
+import { createSharedApi, reconstructAuditGeometry } from './shared-api.js';
 import { initializeFirebaseAuth } from './firebase-auth.js';
+import { createQuestionnaireState, setTypeEnabled, addBankQuestion, addCustomQuestion, updateQuestion, removeQuestion, moveQuestion, serializeQuestionnaires, validateQuestionnaire } from './questionnaires.js';
 
 let sharedApi = null;
 let firebaseAuth = null;
@@ -98,6 +99,17 @@ function errorMarkup(message, retry = true) {
   </section>`;
 }
 
+function showBoundedError(box, message) {
+  const pages = splitDisplayText(message, 100); let index = 0;
+  box.hidden = false; box.setAttribute('role', 'alert');
+  const render = () => {
+    box.innerHTML = `<p>${escapeHtml(pages[index])}</p><div class="error-page-actions">${pages.length > 1 ? `<button class="button is-light" type="button" data-error-next>More (${index + 1}/${pages.length})</button>` : ''}<button class="button is-light" type="button" data-error-close>Dismiss</button></div>`;
+    box.querySelector('[data-error-next]')?.addEventListener('click', () => { index = (index + 1) % pages.length; render(); });
+    box.querySelector('[data-error-close]').addEventListener('click', () => { box.hidden = true; });
+  };
+  render();
+}
+
 async function api(url, options = {}) {
   if (sharedApi && url !== '/api/config') return sharedApi.request(url, options);
   let response;
@@ -182,12 +194,19 @@ function createMap(elementId, options = {}) {
   replaceTileLayer(map);
   L.control.zoom({ position: 'bottomright' }).addTo(map);
   state.activeMaps.push(map);
+  const resize = () => { if (state.activeMaps.includes(map)) map.invalidateSize({ pan: false, animate: false }); };
+  const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(resize) : null;
+  observer?.observe(map.getContainer());
+  window.visualViewport?.addEventListener('resize', resize);
+  window.visualViewport?.addEventListener('scroll', resize);
+  map._walkAuditCleanup = () => { observer?.disconnect(); window.visualViewport?.removeEventListener('resize', resize); window.visualViewport?.removeEventListener('scroll', resize); };
   return map;
 }
 
 function destroyMaps() {
   for (const map of state.activeMaps) {
     try {
+      map._walkAuditCleanup?.();
       // Remove paths before their canvas so teardown cannot enqueue a redraw
       // against a renderer whose drawing context has already been destroyed.
       map.eachLayer(layer => { if (layer instanceof L.Path) map.removeLayer(layer); });
@@ -199,7 +218,7 @@ function destroyMaps() {
 
 function scheduleMapResize(map) {
   requestAnimationFrame(() => {
-    if (state.activeMaps.includes(map)) map.invalidateSize();
+    if (state.activeMaps.includes(map)) map.invalidateSize({ pan: false, animate: false });
   });
 }
 
@@ -326,13 +345,25 @@ function pageReady() {
   requestAnimationFrame(() => appRoot.focus({ preventScroll: true }));
 }
 
+function restorePagerFocus(preferred, fallback) {
+  const focus = () => {
+    const target = document.querySelector(preferred);
+    const next = target && !target.disabled ? target : document.querySelector(fallback);
+    next?.focus({ preventScroll: true });
+  };
+  focus();
+  requestAnimationFrame(focus);
+}
+
 async function renderRoute() {
   const token = ++state.routeToken;
   destroyMaps();
+  setViewportMode('normal');
   modalRoot.replaceChildren();
   state.currentStudyPayload = null;
   const path = location.pathname.replace(/\/+$/, '') || '/';
   const pathChanged = state.lastPath !== path;
+  if (pathChanged && state.auditWizard) clearAuditWizard();
   state.lastPath = path;
   appRoot.innerHTML = loadingMarkup();
 
@@ -372,6 +403,59 @@ async function renderRoute() {
     document.querySelector('#error-home')?.addEventListener('click', () => navigate('/'));
     pageReady();
   }
+}
+
+function clearAuditWizard() {
+  const wizard = state.auditWizard;
+  if (!wizard) return;
+  clearTimeout(wizard.autosaveTimer);
+  for (const slot of wizard.photoSlots?.values() || []) {
+    if (slot.url && slot.privateUrl) sharedApi?.revokePhoto(slot.url);
+    else if (slot.url?.startsWith('blob:')) URL.revokeObjectURL(slot.url);
+  }
+  state.auditWizard = null;
+}
+
+let viewportCleanup = null;
+function setViewportMode(mode) {
+  viewportCleanup?.(); viewportCleanup = null;
+  document.body.classList.remove('is-login-screen');
+  document.documentElement.classList.remove('is-login-screen');
+  document.body.classList.toggle('is-map-viewport', mode === 'map');
+  document.body.classList.toggle('is-compact-viewport', mode === 'compact');
+  document.documentElement.classList.toggle('is-map-viewport', mode === 'map');
+  document.documentElement.classList.toggle('is-compact-viewport', mode === 'compact');
+  if (mode === 'normal') { document.documentElement.style.removeProperty('--walk-viewport-height'); document.body.classList.remove('viewport-constrained', 'text-zoomed', 'keyboard-constrained'); document.documentElement.classList.remove('viewport-constrained', 'text-zoomed', 'keyboard-constrained'); return; }
+  let previousFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+  const update = () => {
+    const height = Math.min(window.innerHeight, window.visualViewport?.height || window.innerHeight);
+    const width = Math.min(window.innerWidth, window.visualViewport?.width || window.innerWidth);
+    const fontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    const zoomed = fontSize > 20;
+    const keyboard = mode === 'compact' && (height < 520 || width < 320);
+    const constrained = mode === 'compact' && (zoomed || keyboard);
+    const entering = constrained && !document.body.classList.contains('viewport-constrained');
+    document.documentElement.style.setProperty('--walk-viewport-height', `${height}px`);
+    document.body.classList.toggle('viewport-constrained', constrained);
+    document.documentElement.classList.toggle('viewport-constrained', constrained);
+    document.body.classList.toggle('text-zoomed', zoomed);
+    document.documentElement.classList.toggle('text-zoomed', zoomed);
+    document.body.classList.toggle('keyboard-constrained', keyboard);
+    document.documentElement.classList.toggle('keyboard-constrained', keyboard);
+    if (entering && document.body.classList.contains('is-login-screen')) {
+      const panel = document.querySelector('.login-panel');
+      if (panel) panel.dataset.loginStage = document.activeElement?.id === 'login-password' || document.activeElement?.id === 'create-account' ? 'password' : document.activeElement?.id === 'login-email' ? 'email' : 'choice';
+    }
+    if (fontSize !== previousFontSize && state.auditWizard && sharedApi && [1, 4, 5].includes(state.auditWizard.step)) {
+      const wizard = state.auditWizard;
+      queueMicrotask(() => { if (state.auditWizard === wizard) renderAuditWizardScreen(); });
+    }
+    previousFontSize = fontSize;
+  };
+  window.visualViewport?.addEventListener('resize', update);
+  window.addEventListener('resize', update);
+  viewportCleanup = () => { window.visualViewport?.removeEventListener('resize', update); window.removeEventListener('resize', update); };
+  update();
 }
 
 initializeTheme();
@@ -423,18 +507,27 @@ async function boot() {
       firebaseAuth.onChange(async user => {
         if ((user?.uid || null) === previousUid) return;
         previousUid = user?.uid || null;
+        const requestedUid = previousUid;
+        state.routeToken++;
+        destroyMaps();
+        setViewportMode('normal');
+        appRoot.innerHTML = loadingMarkup('Switching accounts…');
+        modalRoot.replaceChildren();
         privateDraftCache.clear();
+        clearAuditWizard();
         sharedApi.clear();
-        state.auditWizard = null;
         state.studyWizard = null;
+        state.currentStudyPayload = null;
         state.user = null;
         updateHeader();
         try {
-          state.user = await sharedApi.getProfile();
+          const profile = await sharedApi.getProfile();
+          if ((firebaseAuth.user()?.uid || null) !== requestedUid) return;
+          state.user = profile;
           updateHeader();
-          if (user && !state.user) return renderNameStep(user.email || '', '/');
+          if (user && !state.user) return renderNameStep(user.email || '', safeReturnPath(new URLSearchParams(location.search).get('return')));
           renderRoute();
-        } catch (error) { showToast(error.message, 'error'); }
+        } catch (error) { if ((firebaseAuth.user()?.uid || null) === requestedUid) { renderRoute(); showToast(error.message, 'error'); } }
       });
     }
     updateHeader();
@@ -461,22 +554,27 @@ async function boot() {
 boot();
 
 function renderFirebaseLogin() {
+  setViewportMode('compact');
+  document.body.classList.add('is-login-screen');
+  document.documentElement.classList.add('is-login-screen');
   const returnTo = safeReturnPath(new URLSearchParams(location.search).get('return'));
-  appRoot.innerHTML = `<section class="login-shell page-shell"><div class="panel-card login-panel">
+  appRoot.innerHTML = `<section class="login-shell page-shell"><div class="panel-card login-panel" data-login-stage="choice">
     <h1 class="title">Volunteer sign-in</h1>
     <p class="subtitle">Sign in to organize studies and save walk audits.</p>
     <button id="google-sign-in" class="button is-primary is-fullwidth mb-5" type="button">Continue with Google</button>
+    <button id="login-zoom-email" class="button is-link is-fullwidth" type="button">Continue with email</button>
     <form id="firebase-login-form">
-      <div class="field"><label class="label" for="login-email">Email address</label>
+      <div class="field" id="login-email-field"><label class="label" for="login-email">Email address</label>
         <input class="input" id="login-email" type="email" autocomplete="email" required></div>
-      <div class="field"><label class="label" for="login-password">Password</label>
+      <div class="field" id="login-password-field"><label class="label" for="login-password">Password</label>
         <input class="input" id="login-password" type="password" autocomplete="current-password" minlength="6" required></div>
-      <label class="checkbox mb-4"><input id="create-account" type="checkbox"> Create a new account</label>
-      <button class="button is-link is-fullwidth" type="submit">Continue with email</button>
+      <label class="checkbox mb-4" id="login-create-field"><input id="create-account" type="checkbox"> Create a new account</label>
+      <button class="button is-link is-fullwidth" id="login-email-submit" type="submit">Continue with email</button>
     </form>
     <button class="button is-text mt-3" id="reset-password" type="button">Reset password</button>
     <p id="firebase-login-error" class="error-notice mt-4" hidden></p>
-    <p class="help mt-5">Accounts from the previous website are separate. Use a verified sign-in provider to create your new profile.</p>
+    <details class="login-help"><summary>Account help</summary><p>Accounts from the previous website are separate. Use a verified sign-in provider to create your new profile.</p></details>
+    <div class="login-zoom-navigation"><button class="button is-light" id="login-zoom-back" type="button">Back</button><button class="button is-primary" id="login-zoom-next" type="button">Next</button></div>
   </div></section>`;
   const errorBox = document.querySelector('#firebase-login-error');
   async function signIn(work, button) {
@@ -491,11 +589,15 @@ function renderFirebaseLogin() {
       updateHeader();
       navigate(returnTo || '/', { replace: true });
     } catch (error) {
-      errorBox.textContent = error.message;
-      errorBox.hidden = false;
+      showBoundedError(errorBox, error.message);
     } finally { button.disabled = false; button.classList.remove('is-loading'); }
   }
   document.querySelector('#google-sign-in').addEventListener('click', event => signIn(() => firebaseAuth.google(), event.currentTarget));
+  const loginPanel = document.querySelector('.login-panel');
+  const setLoginStage = stage => { loginPanel.dataset.loginStage = stage; if (stage === 'email') document.querySelector('#login-email').focus(); else if (stage === 'password') document.querySelector('#login-password').focus(); };
+  document.querySelector('#login-zoom-email').addEventListener('click', () => setLoginStage('email'));
+  document.querySelector('#login-zoom-back').addEventListener('click', () => setLoginStage(loginPanel.dataset.loginStage === 'password' ? 'email' : 'choice'));
+  document.querySelector('#login-zoom-next').addEventListener('click', () => { if (document.querySelector('#login-email').reportValidity()) setLoginStage('password'); });
   document.querySelector('#firebase-login-form').addEventListener('submit', event => {
     event.preventDefault();
     signIn(() => firebaseAuth.email(document.querySelector('#login-email').value.trim(), document.querySelector('#login-password').value, document.querySelector('#create-account').checked), event.currentTarget.querySelector('button'));
@@ -506,7 +608,7 @@ function renderFirebaseLogin() {
       if (!email) throw new Error('Enter your email address first.');
       await firebaseAuth.resetPassword(email);
       showToast('If this account exists, a password reset email is on its way.');
-    } catch (error) { errorBox.textContent = error.message; errorBox.hidden = false; }
+    } catch (error) { showBoundedError(errorBox, error.message); }
   });
   pageReady();
 }
@@ -565,6 +667,7 @@ function renderLogin() {
 }
 
 function renderNameStep(email, returnTo) {
+  setViewportMode('normal');
   appRoot.innerHTML = `<section class="login-shell page-shell">
     <div class="panel-card login-panel">
       <p class="eyebrow">Welcome first-timer!</p>
@@ -610,8 +713,20 @@ function renderNameStep(email, returnTo) {
 }
 
 async function renderDashboard(token) {
-  const { studies } = await api('/api/dashboard');
+  const dashboard = await api('/api/dashboard');
+  const { studies } = dashboard;
   if (token !== state.routeToken) return;
+  const cards = items => items.map((study) => `<article class="study-card">
+    <a href="/studies/${study.id}" data-nav>
+      <img class="study-thumbnail" src="${escapeHtml(study.thumbnailPath)}" alt="Map thumbnail of the ${escapeHtml(study.neighborhood)} study area">
+      <div class="study-card-body"><h2 class="study-card-title">${escapeHtml(study.neighborhood)} ${escapeHtml(monthYear(study.createdOn))}</h2>
+        <p class="study-card-meta">${study.auditCount} ${study.auditCount === 1 ? 'audit' : 'audits'} · Started ${escapeHtml(formatDate(study.createdOn))}</p></div>
+    </a></article>`).join('');
+  const group = (name, title, page, empty) => `<section class="dashboard-group" data-dashboard-group="${name}"><h2 class="title is-4">${title}</h2>
+    ${page.studies.length ? '' : `<p class="meta-line dashboard-empty">${empty}</p>`}
+    <div class="study-grid">${cards(page.studies)}</div>
+    <p class="error-notice mt-3" data-group-error hidden></p>
+    <button class="button is-light mt-4" data-load-group="${name}" type="button" ${page.hasMore ? '' : 'hidden'}>Load more ${name === 'mine' ? 'your studies' : 'other studies'}</button></section>`;
   appRoot.innerHTML = `<section class="page-shell">
     <div class="page-heading">
       <div>
@@ -621,17 +736,7 @@ async function renderDashboard(token) {
       </div>
       <button class="button is-primary" id="start-study" type="button">Start new study</button>
     </div>
-    ${studies.length ? `<div class="study-grid">
-      ${studies.map((study) => `<article class="study-card">
-        <a href="/studies/${study.id}" data-nav>
-          <img class="study-thumbnail" src="${escapeHtml(study.thumbnailPath)}" alt="Map thumbnail of the ${escapeHtml(study.neighborhood)} study area">
-          <div class="study-card-body">
-            <h2 class="study-card-title">${escapeHtml(study.neighborhood)} ${escapeHtml(monthYear(study.createdOn))}</h2>
-            <p class="study-card-meta">${study.auditCount} ${study.auditCount === 1 ? 'audit' : 'audits'} · Started ${escapeHtml(formatDate(study.createdOn))}</p>
-          </div>
-        </a>
-      </article>`).join('')}
-    </div>` : `<div class="empty-state">
+    ${sharedApi ? `${group('mine', 'Your studies', dashboard.minePage, 'Studies you organize or contribute to will appear here.')}${group('other', 'Other studies', dashboard.otherPage, 'There are no other studies yet.')}` : studies.length ? `<div class="study-grid">${cards(studies)}</div>` : `<div class="empty-state">
       <h2 class="title">No studies yet</h2>
       <p class="mb-4">Draw a neighborhood boundary, then invite volunteers to audit its streets and intersections.</p>
       <button class="button is-primary" id="empty-start-study" type="button">Start your first study</button>
@@ -641,16 +746,32 @@ async function renderDashboard(token) {
     </div>
   </section>`;
 
-  document.querySelectorAll('[data-nav]').forEach((link) => link.addEventListener('click', (event) => {
-    event.preventDefault();
-    navigate(link.getAttribute('href'));
+  const bindLinks = root => root.querySelectorAll('[data-nav]').forEach(link => link.addEventListener('click', event => { event.preventDefault(); navigate(link.getAttribute('href')); }));
+  bindLinks(appRoot);
+  document.querySelectorAll('[data-load-group]').forEach(button => button.addEventListener('click', async () => {
+    const name = button.dataset.loadGroup, section = button.closest('[data-dashboard-group]');
+    const page = name === 'mine' ? dashboard.minePage : dashboard.otherPage;
+    button.disabled = true;
+    try {
+      const next = await sharedApi.dashboardPage(name, page.studies.length);
+      if (token !== state.routeToken) return;
+      page.studies.push(...next.studies);
+      const grid = section.querySelector('.study-grid');
+      const wrapper = document.createElement('div'); wrapper.innerHTML = cards(next.studies); bindLinks(wrapper);
+      grid.append(...wrapper.children);
+      section.querySelector('.dashboard-empty')?.remove();
+      button.hidden = !next.hasMore;
+      section.querySelector('[data-group-error]').hidden = true;
+    } catch (error) {
+      const box = section.querySelector('[data-group-error]'); box.textContent = error.message; box.hidden = false;
+    } finally { button.disabled = false; }
   }));
   document.querySelector('#start-study')?.addEventListener('click', () => navigate('/studies/new'));
   document.querySelector('#empty-start-study')?.addEventListener('click', () => navigate('/studies/new'));
   document.querySelector('#sign-out').addEventListener('click', async () => {
     await api('/api/session', { method: 'DELETE' });
     privateDraftCache.clear();
-    state.auditWizard = null;
+    clearAuditWizard();
     state.studyWizard = null;
     state.currentStudyPayload = null;
     if (sharedApi) {
@@ -668,12 +789,13 @@ async function renderDashboard(token) {
 }
 
 function studyWizardFrame({ step, title, help, content, mapStep = false }) {
+  const total = sharedApi ? 4 + (state.studyWizard?.questionnaireState?.enabledTypes.length || 0) : 2;
   return `<section class="wizard-shell ${mapStep ? 'is-map-step' : ''}">
     <div class="wizard-topline">
       <p class="eyebrow mb-0">New study</p>
-      <span class="step-label">Step ${step} of 2</span>
+      <span class="step-label">Step ${step} of ${total}</span>
     </div>
-    <div class="progress-track" aria-label="Study setup progress"><div class="progress-fill" style="width:${step * 50}%"></div></div>
+    <div class="progress-track" aria-label="Study setup progress"><div class="progress-fill" style="width:${(step / total) * 100}%"></div></div>
     <h1 class="wizard-question">${escapeHtml(title)}</h1>
     ${help ? `<p class="wizard-help">${escapeHtml(help)}</p>` : ''}
     ${content}
@@ -682,10 +804,11 @@ function studyWizardFrame({ step, title, help, content, mapStep = false }) {
 
 function renderNewStudy() {
   if (!state.studyWizard) {
-    state.studyWizard = { step: 1, neighborhood: '', vertices: [], error: null };
+    state.studyWizard = { step: 1, neighborhood: '', vertices: [], error: null, questionnaireState: createQuestionnaireState(), bank: null };
   }
   const wizard = state.studyWizard;
   destroyMaps();
+  setViewportMode(wizard.step === 2 ? 'map' : 'normal');
   if (wizard.step === 1) {
     appRoot.innerHTML = studyWizardFrame({
       step: 1,
@@ -722,9 +845,11 @@ function renderNewStudy() {
     return;
   }
 
+  if (sharedApi && wizard.step >= 3) return renderStudyQuestionnaires();
+
   appRoot.innerHTML = studyWizardFrame({
     step: 2,
-    title: `Draw the ${wizard.neighborhood} study area`,
+    title: 'Draw the study area',
     help: 'Move and zoom the map. Place the crosshair at each corner, then tap Add corner. You can drag any corner afterward.',
     mapStep: true,
     content: `<div class="map-shell boundary-map-shell">
@@ -748,6 +873,94 @@ function renderNewStudy() {
   pageReady();
 }
 
+const studyTypeNames = { intersection: 'Intersection', 'street-segment': 'Street segment', point: 'Point' };
+
+function renderStudyQuestionnaires() {
+  const wizard = state.studyWizard;
+  const form = wizard.questionnaireState;
+  if (wizard.step === 3) {
+    appRoot.innerHTML = studyWizardFrame({ step: 3, title: 'Choose audit types', help: 'Volunteers can use any type you enable. Each type has its own questions.', content: `
+      <div class="option-list" aria-label="Enabled audit types">
+        ${Object.entries(studyTypeNames).map(([type, label]) => `<label class="option-row"><input type="checkbox" data-study-type="${type}" ${form.enabledTypes.includes(type) ? 'checked' : ''}><span><strong>${escapeHtml(label)}</strong></span></label>`).join('')}
+      </div>
+      <div id="study-types-error" class="error-notice mt-3" hidden></div>
+      <div class="wizard-actions"><button class="button is-light" id="study-types-back" type="button">Back</button><button class="button is-primary" id="study-types-next" type="button">Next</button></div>` });
+    document.querySelectorAll('[data-study-type]').forEach(input => input.addEventListener('change', () => {
+      wizard.questionnaireState = setTypeEnabled(wizard.questionnaireState, input.dataset.studyType, input.checked, wizard.bank);
+    }));
+    document.querySelector('#study-types-back').addEventListener('click', () => { wizard.step = 2; renderNewStudy(); });
+    document.querySelector('#study-types-next').addEventListener('click', () => {
+      if (!wizard.questionnaireState.enabledTypes.length) {
+        const error = document.querySelector('#study-types-error'); error.textContent = 'Select at least one audit type.'; error.hidden = false; return;
+      }
+      wizard.step = 4; renderNewStudy();
+    });
+    pageReady(); return;
+  }
+  const enabled = form.enabledTypes;
+  const editorIndex = wizard.step - 4;
+  if (editorIndex < enabled.length) {
+    const type = enabled[editorIndex], questions = form.questions[type];
+    const available = wizard.bank.questions.filter(question => question.eligibleTypes.includes(type));
+    appRoot.innerHTML = studyWizardFrame({ step: wizard.step, title: `${studyTypeNames[type]} questions`, help: 'Edit the questions volunteers will answer. You can add, remove, or reorder them.', content: `
+      <div class="question-editor-list">
+        ${questions.map((question, index) => `<article class="question-editor-card" data-question-id="${escapeHtml(question.id)}">
+          <div class="question-editor-heading"><strong>Question ${index + 1}</strong><span class="help">${question.sourceQuestionId ? 'From the starter bank' : 'Custom question'}</span></div>
+          <label class="label" for="label-${escapeHtml(question.id)}">Question text</label>
+          <textarea class="textarea" id="label-${escapeHtml(question.id)}" data-question-field="label" rows="2" maxlength="500">${escapeHtml(question.label)}</textarea>
+          ${question.type === 'choice' ? `<fieldset class="question-options"><legend class="label">Answer options</legend>${question.options.map((option, optionIndex) => `<div class="question-option"><label class="sr-only" for="option-${escapeHtml(question.id)}-${optionIndex}">Option ${optionIndex + 1}</label><input class="input" id="option-${escapeHtml(question.id)}-${optionIndex}" data-option-index="${optionIndex}" maxlength="200" value="${escapeHtml(option)}"><button class="button is-light" type="button" data-remove-option="${optionIndex}" aria-label="Remove option ${optionIndex + 1}">Remove</button></div>`).join('')}<button class="button is-light" type="button" data-add-option>Add option</button></fieldset>` : '<p class="help mt-3">Text answer, up to 2,000 characters.</p>'}
+          <label class="checkbox question-required"><input type="checkbox" data-question-field="required" ${question.required ? 'checked' : ''}> Answer required</label>
+          <div class="button-row"><button class="button is-light" type="button" data-move="-1" ${index === 0 ? 'disabled' : ''}>Move up</button><button class="button is-light" type="button" data-move="1" ${index === questions.length - 1 ? 'disabled' : ''}>Move down</button><button class="button is-light" type="button" data-remove-question>Remove question</button></div>
+        </article>`).join('')}
+      </div>
+      <div class="panel-card mt-4"><label class="label" for="bank-question">Add a starter question</label><div class="question-add-row"><div class="select is-fullwidth"><select id="bank-question">${available.map(question => `<option value="${escapeHtml(question.id)}">${escapeHtml(question.prompt.label)}</option>`).join('')}</select></div><button class="button is-light" id="add-bank-question" type="button">Add</button></div><div class="button-row mt-3"><button class="button is-light" id="add-custom-text" type="button">Add custom text question</button><button class="button is-light" id="add-custom-choice" type="button">Add custom choice question</button></div></div>
+      <div id="study-questions-error" class="error-notice mt-3" hidden></div>
+      <div class="wizard-actions"><button class="button is-light" id="study-questions-back" type="button">Back</button><button class="button is-primary" id="study-questions-next" type="button">${editorIndex === enabled.length - 1 ? 'Review study' : 'Next type'}</button></div>` });
+    const list = document.querySelector('.question-editor-list');
+    const updateFromInput = event => {
+      const card = event.target.closest('[data-question-id]'); if (!card) return;
+      const id = card.dataset.questionId, current = wizard.questionnaireState.questions[type].find(question => question.id === id);
+      if (!current) return;
+      if (event.target.dataset.questionField === 'label') wizard.questionnaireState = updateQuestion(wizard.questionnaireState, type, id, { label: event.target.value });
+      if (event.target.dataset.questionField === 'required') wizard.questionnaireState = updateQuestion(wizard.questionnaireState, type, id, { required: event.target.checked });
+      if (event.target.dataset.optionIndex !== undefined) {
+        const options = [...current.options]; options[Number(event.target.dataset.optionIndex)] = event.target.value;
+        wizard.questionnaireState = updateQuestion(wizard.questionnaireState, type, id, { options });
+      }
+    };
+    list.addEventListener('input', updateFromInput);
+    list.addEventListener('change', updateFromInput);
+    list.addEventListener('click', event => {
+      const button = event.target.closest('button'), card = button?.closest('[data-question-id]'); if (!card) return;
+      const id = card.dataset.questionId, current = wizard.questionnaireState.questions[type].find(question => question.id === id);
+      if (button.hasAttribute('data-remove-question')) wizard.questionnaireState = removeQuestion(wizard.questionnaireState, type, id);
+      else if (button.dataset.move) wizard.questionnaireState = moveQuestion(wizard.questionnaireState, type, id, Number(button.dataset.move));
+      else if (button.hasAttribute('data-add-option')) wizard.questionnaireState = updateQuestion(wizard.questionnaireState, type, id, { options: [...current.options, ''] });
+      else if (button.dataset.removeOption !== undefined) wizard.questionnaireState = updateQuestion(wizard.questionnaireState, type, id, { options: current.options.filter((_, index) => index !== Number(button.dataset.removeOption)) });
+      else return;
+      renderNewStudy();
+    });
+    document.querySelector('#add-bank-question').addEventListener('click', () => { wizard.questionnaireState = addBankQuestion(wizard.questionnaireState, type, document.querySelector('#bank-question').value, wizard.bank); renderNewStudy(); });
+    for (const kind of ['text', 'choice']) document.querySelector(`#add-custom-${kind}`).addEventListener('click', () => { wizard.questionnaireState = addCustomQuestion(wizard.questionnaireState, type, kind); renderNewStudy(); });
+    document.querySelector('#study-questions-back').addEventListener('click', () => { wizard.step--; renderNewStudy(); });
+    document.querySelector('#study-questions-next').addEventListener('click', () => {
+      const message = validateQuestionnaire(wizard.questionnaireState.questions[type]);
+      if (message) { const box = document.querySelector('#study-questions-error'); box.textContent = message; box.hidden = false; return; }
+      wizard.step++; renderNewStudy();
+    });
+    pageReady(); return;
+  }
+  appRoot.innerHTML = studyWizardFrame({ step: 4 + enabled.length, title: 'Review and create your study', help: 'These questions will be saved with the study for every contributor.', content: `
+    <div class="review-list"><article class="review-card"><strong>${escapeHtml(wizard.neighborhood)}</strong><p>${wizard.vertices.length} boundary corners</p></article>
+      ${enabled.map(type => `<article class="review-card"><h2 class="title is-5">${escapeHtml(studyTypeNames[type])}</h2><ol>${form.questions[type].map(question => `<li><strong>${escapeHtml(question.label)}</strong><span class="help">${question.required ? 'Required' : 'Optional'} · ${question.type === 'choice' ? 'Choice' : 'Text'}</span>${question.type === 'choice' ? `<ul>${question.options.map(option => `<li>${escapeHtml(option)}</li>`).join('')}</ul>` : ''}</li>`).join('')}</ol></article>`).join('')}
+    </div>
+    <div id="study-create-error" class="error-notice mt-3" hidden></div>
+    <div class="wizard-actions"><button class="button is-light" id="study-review-back" type="button">Back</button><button class="button is-primary" id="study-create" type="button">Create study</button></div>` });
+  document.querySelector('#study-review-back').addEventListener('click', () => { wizard.step--; renderNewStudy(); });
+  document.querySelector('#study-create').addEventListener('click', createStudyFromWizard);
+  pageReady();
+}
+
 function locateMap(map, onSuccess) {
   if (!navigator.geolocation) {
     showToast('Location services are not available in this browser.', 'error');
@@ -758,12 +971,14 @@ function locateMap(map, onSuccess) {
   navigator.geolocation.getCurrentPosition(
     (position) => {
       button?.classList?.remove('is-loading');
+      if (!state.activeMaps.includes(map)) return;
       const latlng = [position.coords.latitude, position.coords.longitude];
       map.setView(latlng, Math.max(map.getZoom(), 17));
       onSuccess?.(position);
     },
     (error) => {
       button?.classList?.remove('is-loading');
+      if (!state.activeMaps.includes(map)) return;
       showToast(error.code === 1 ? 'Location permission was not granted.' : 'Your location could not be determined.', 'error');
     },
     { enableHighAccuracy: true, timeout: 12_000, maximumAge: 15_000 }
@@ -773,6 +988,7 @@ function locateMap(map, onSuccess) {
 function initializeBoundaryMap() {
   const wizard = state.studyWizard;
   const map = createMap('boundary-map', { scrollWheelZoom: true });
+  let manuallyMoved = false;
   const fallback = [32.7767, -96.797];
   if (wizard.vertices.length) {
     map.fitBounds(L.latLngBounds(wizard.vertices.map(([lng, lat]) => [lat, lng])), { padding: [60, 60], maxZoom: 17 });
@@ -780,12 +996,13 @@ function initializeBoundaryMap() {
     map.setView(fallback, 13);
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (position) => map.setView([position.coords.latitude, position.coords.longitude], 15),
+        (position) => { if (state.activeMaps.includes(map) && !manuallyMoved) map.setView([position.coords.latitude, position.coords.longitude], 15); },
         () => {},
         { enableHighAccuracy: false, timeout: 5000, maximumAge: 120_000 }
       );
     }
   }
+  map.on('dragstart zoomstart', () => { manuallyMoved = true; });
 
   let polygonLayer;
   let markers = [];
@@ -839,7 +1056,26 @@ function initializeBoundaryMap() {
     wizard.step = 1;
     renderNewStudy();
   });
-  document.querySelector('#boundary-finish').addEventListener('click', createStudyFromWizard);
+  document.querySelector('#boundary-finish').addEventListener('click', async (event) => {
+    if (!sharedApi) return createStudyFromWizard();
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      if (!wizard.bank) {
+        const response = await fetch('/question-bank.json');
+        if (!response.ok) throw new Error('The question catalog could not be loaded.');
+        wizard.bank = await response.json();
+      }
+      if (state.studyWizard !== wizard) return;
+      wizard.error = null;
+      wizard.step = 3;
+      renderNewStudy();
+    } catch (error) {
+      const box = document.querySelector('#boundary-error');
+      if (box) { box.textContent = error.message; box.hidden = false; }
+      button.disabled = false;
+    }
+  });
   redraw();
   scheduleMapResize(map);
 }
@@ -881,7 +1117,7 @@ async function createStudyFromWizard() {
   try {
     const result = await api('/api/studies', {
       method: 'POST',
-      body: { neighborhood: wizard.neighborhood, area }
+      body: { neighborhood: wizard.neighborhood, area, ...(sharedApi ? serializeQuestionnaires(wizard.questionnaireState, wizard.bank) : {}) }
     });
     closeModal();
     state.studyWizard = null;
@@ -890,7 +1126,7 @@ async function createStudyFromWizard() {
     wizard.creating = false;
     closeModal();
     wizard.error = error.message;
-    const errorBox = document.querySelector('#boundary-error');
+    const errorBox = document.querySelector('#study-create-error') || document.querySelector('#boundary-error');
     if (errorBox) {
       errorBox.textContent = error.message;
       errorBox.hidden = false;
@@ -952,8 +1188,10 @@ async function renderStudyPage(studyId, token) {
       <aside class="study-sidebar">
         <section class="panel-card">
           <div class="section-heading"><h2 class="title is-4">Audit progress</h2></div>
-          ${progressMarkup('Streets', progress.streets)}
-          ${progressMarkup('Intersections', progress.intersections)}
+          ${!sharedApi || study.allowedAuditTypes?.includes('street-segment') ? progressMarkup('Streets', progress.streets) : ''}
+          ${!sharedApi || study.allowedAuditTypes?.includes('intersection') ? progressMarkup('Intersections', progress.intersections) : ''}
+          ${progress.points ? `<p class="progress-caption">${progress.points.observations} point ${progress.points.observations === 1 ? 'observation' : 'observations'}</p>` : ''}
+          ${progress.overall?.coverageApplicable === false ? '<p class="meta-line">Coverage not applicable</p>' : ''}
         </section>
         <section class="panel-card">
           <div class="section-heading">
@@ -1026,7 +1264,7 @@ async function renderStudyPage(studyId, token) {
     }
   });
 
-  initializeStudyMap(study, audits);
+  initializeStudyMap(study, audits, progress);
   pageReady();
 }
 
@@ -1039,18 +1277,18 @@ function progressMarkup(label, item) {
     <div class="progress-track" role="progressbar" aria-label="${escapeHtml(label)} audited" aria-valuenow="${Math.round(item.ratio * 100)}" aria-valuemin="0" aria-valuemax="100">
       <div class="progress-fill" style="width:${Math.round(item.ratio * 100)}%"></div>
     </div>
-    <p class="progress-caption">${item.audited} of ${item.total} mapped</p>
+    <p class="progress-caption">${item.audited} of ${item.total} mapped${item.partial ? ` · ${item.partial} partially covered` : ''}</p>
   </div>`;
 }
 
 function reportMarkup(report) {
   return `<article class="report-card">
-    <p class="review-label">${escapeHtml(formatDateTime(report.createdOn))} · ${percent(report.completion)} complete</p>
+    <p class="review-label">${escapeHtml(formatDateTime(report.createdOn))} · ${report.coverageApplicable === false ? 'Coverage not applicable' : `${percent(report.completion)} complete`}</p>
     <p class="mt-2">${escapeHtml(report.description)}</p>
   </article>`;
 }
 
-function initializeStudyMap(study, audits) {
+function initializeStudyMap(study, audits, progress) {
   const map = createMap('study-map', { scrollWheelZoom: false });
   const areaLayer = L.geoJSON(study.area, {
     style: { color: '#9a7700', weight: 4, fillColor: '#f5c842', fillOpacity: 0.23 }
@@ -1065,16 +1303,24 @@ function initializeStudyMap(study, audits) {
     })
   }).addTo(map);*/
 
+  const segmentIndex = new Map((study.segments?.features || []).map(feature => [feature.properties.id, feature]));
+  for (const covered of progress?.streets?.coverage || []) {
+    for (const [fromFraction, toFraction] of covered.intervals) {
+      const geometry = reconstructAuditGeometry({ type: 'street-segment', featureId: covered.featureId, routeSelection: { edges: [{ featureId: covered.featureId, fromFraction, toFraction }] } }, study, segmentIndex);
+      if (geometry) L.geoJSON(geometry, { interactive: false, style: { color: covered.complete ? '#087447' : '#c77c00', weight: 8, opacity: 0.8 } }).addTo(map);
+    }
+  }
   const latestByFeature = new Map();
   for (const audit of audits) {
-    const id = audit.geojson?.properties?.id || `audit-${audit.id}`;
+    const id = audit.type === 'point' || audit.routeSelection ? `audit/${audit.id}` : `${audit.type}/${audit.featureId || audit.geojson?.properties?.id || audit.id}`;
     if (!latestByFeature.has(id)) latestByFeature.set(id, audit);
   }
   for (const audit of latestByFeature.values()) {
+    if (!audit.geojson) continue;
     const layer = L.geoJSON(audit.geojson, {
-      style: { color: '#087447', weight: 8, opacity: 0.95 },
+      style: { color: '#075d55', weight: 5, opacity: 0.95 },
       pointToLayer: (_feature, latlng) => L.circleMarker(latlng, {
-        radius: 1, color: '#087447', weight: 1, fillColor: '#ffffff', fillOpacity: 1
+        radius: audit.type === 'point' ? 6 : 4, color: '#087447', weight: 2, fillColor: '#ffffff', fillOpacity: 1
       })
     }).addTo(map);
     layer.bindPopup(`<strong>${escapeHtml(audit.locationDescription)}</strong><br>
@@ -1122,6 +1368,11 @@ function writeAuditCache() {
   }));
 }
 
+const editableDraftFields = new Set(['type', 'worksheetId', 'featureId', 'locationGps', 'locationDescription', 'geojson', 'routeSelection', 'answers']);
+function newerDraftFields(current, before) {
+  return Object.fromEntries(Object.entries(current).filter(([key, value]) => editableDraftFields.has(key) && JSON.stringify(value) !== JSON.stringify(before[key])));
+}
+
 async function renderAuditWizard(studyId, editingAuditId, token) {
   if (!state.auditWizard || state.auditWizard.studyId !== studyId || state.auditWizard.editingAuditId !== editingAuditId) {
     const cacheKey = auditCacheKey(studyId, editingAuditId);
@@ -1151,18 +1402,32 @@ async function renderAuditWizard(studyId, editingAuditId, token) {
         body: { editingAuditId }
       })).draft;
     }
+    let originalAudit = null;
+    if (sharedApi && editingAuditId) originalAudit = (await sharedApi.raw(`audits/${editingAuditId}`)).audit;
+    if (token !== state.routeToken) return;
+    const assigned = draft.type && studyPayload.study.questionnaires?.[draft.type];
+    const unboundDraft = !draft.type
+      ? draft.worksheetId != null || draft.featureId != null || draft.locationGps != null || draft.locationDescription != null || draft.geojson != null || draft.routeSelection != null || Object.keys(draft.answers || {}).length > 0
+      : draft.worksheetId == null && Object.keys(draft.answers || {}).length > 0;
+    const draftMismatch = sharedApi && (editingAuditId
+      ? draft.type !== originalAudit.type || draft.worksheetId !== originalAudit.worksheetId
+      : unboundDraft || (draft.type && (!assigned || (draft.worksheetId != null && draft.worksheetId !== assigned.id))));
     state.auditWizard = {
       studyId,
       editingAuditId,
       study: studyPayload.study,
       draft,
       cacheKey,
-      step: Math.min(Math.max(Number(cached?.step || 1), 1), 6),
+      step: Math.min(Math.max(Number(cached?.step || (editingAuditId && sharedApi ? 2 : 1)), editingAuditId && sharedApi ? 2 : 1), sharedApi ? 5 : 6),
       questionIndex: Math.max(Number(cached?.questionIndex || 0), 0),
       worksheets: null,
       selectedFeature: draft.geojson || null,
       locationMarker: null,
-      locationAccuracy: null
+      locationAccuracy: null,
+      originalLegacyLocation: sharedApi && originalAudit?.type === 'street-segment' && !originalAudit.routeSelection
+        ? { featureId: originalAudit.featureId, locationGps: structuredClone(originalAudit.locationGps), geojson: structuredClone(originalAudit.geojson) } : null,
+      replaceLegacyRoute: Boolean(sharedApi && originalAudit?.type === 'street-segment' && !originalAudit.routeSelection && draft.routeSelection),
+      draftMismatch
     };
     writeAuditCache();
   }
@@ -1175,9 +1440,9 @@ function auditWizardFrame({ title, help, content, step, mapStep = false }) {
   return `<section class="wizard-shell ${mapStep ? 'is-map-step' : ''}">
     <div class="wizard-topline">
       <p class="eyebrow mb-0">${label} · ${escapeHtml(wizard.study.neighborhood)}</p>
-      <span class="step-label">Step ${step} of 6</span>
+      <span class="step-label">Step ${step} of ${sharedApi ? 5 : 6}</span>
     </div>
-    <div class="progress-track" aria-label="Audit progress"><div class="progress-fill" style="width:${(step / 6) * 100}%"></div></div>
+    <div class="progress-track" aria-label="Audit progress"><div class="progress-fill" style="width:${(step / (sharedApi ? 5 : 6)) * 100}%"></div></div>
     <h1 class="wizard-question">${escapeHtml(title)}</h1>
     ${help ? `<p class="wizard-help">${escapeHtml(help)}</p>` : ''}
     ${content}
@@ -1187,13 +1452,30 @@ function auditWizardFrame({ title, help, content, step, mapStep = false }) {
 async function renderAuditWizardScreen() {
   const wizard = state.auditWizard;
   destroyMaps();
+  setViewportMode(wizard.step === 2 && !wizard.draftMismatch ? 'map' : !wizard.draftMismatch && (sharedApi ? [1, 4, 5].includes(wizard.step) : wizard.step === 4) ? 'compact' : 'normal');
   writeAuditCache();
+  if (wizard.draftMismatch) return renderDraftMismatch();
   if (wizard.step === 1) return renderAuditTypeStep();
   if (wizard.step === 2) return renderAuditLocationStep();
   if (wizard.step === 3) return renderAuditDescriptionStep();
-  if (wizard.step === 4) return renderWorksheetStep();
-  if (wizard.step === 5) return renderQuestionStep();
+  if (wizard.step === 4) return sharedApi ? renderQuestionStep() : renderWorksheetStep();
+  if (wizard.step === 5) return sharedApi ? renderAuditReviewStep() : renderQuestionStep();
   return renderAuditReviewStep();
+}
+
+function renderDraftMismatch() {
+  const wizard = state.auditWizard;
+  appRoot.innerHTML = `<section class="page-shell narrow"><div class="panel-card"><h1 class="title is-3">This saved draft uses an older audit definition</h1><p>Your earlier answers are preserved below. Start a separate draft to continue with the correct questions and audit type.</p><dl class="answers-list">${Object.entries(wizard.draft.answers || {}).map(([key, value]) => `<div class="answer-row"><dt>${escapeHtml(key)}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}</dl><div id="draft-mismatch-error" class="error-notice mt-3" hidden></div><div class="button-row mt-4"><button class="button is-light" id="draft-mismatch-back" type="button">Back to study</button><button class="button is-primary" id="draft-mismatch-new" type="button">Start a separate draft</button></div></div></section>`;
+  document.querySelector('#draft-mismatch-back').addEventListener('click', () => navigate(`/studies/${wizard.studyId}`));
+  document.querySelector('#draft-mismatch-new').addEventListener('click', async event => {
+    event.currentTarget.disabled = true;
+    try {
+      const result = await api(`/api/studies/${wizard.studyId}/drafts`, { method: 'POST', body: { editingAuditId: wizard.editingAuditId } });
+      wizard.draft = result.draft; wizard.draftMismatch = false; wizard.step = wizard.editingAuditId ? 2 : 1; wizard.questionIndex = 0; wizard.worksheets = null;
+      renderAuditWizardScreen();
+    } catch (error) { const box = document.querySelector('#draft-mismatch-error'); box.textContent = error.message; box.hidden = false; event.currentTarget.disabled = false; }
+  });
+  pageReady();
 }
 
 async function persistAuditDraft(updates) {
@@ -1207,8 +1489,7 @@ async function persistAuditDraft(updates) {
     try {
       const result = await api(`/api/drafts/${wizard.draft.id}`, { method: 'PATCH', body: updates });
       // A response to an earlier save must not replace text entered while it ran.
-      const newer = Object.fromEntries(Object.entries(wizard.draft)
-        .filter(([key, value]) => key !== 'version' && JSON.stringify(value) !== JSON.stringify(saving[key])));
+      const newer = newerDraftFields(wizard.draft, saving);
       wizard.draft = { ...result.draft, ...newer };
       writeAuditCache();
       syncStatus.textContent = Object.keys(newer).length ? 'Unsaved changes' : 'Saved';
@@ -1245,42 +1526,39 @@ async function persistAuditDraft(updates) {
 
 function renderAuditTypeStep() {
   const wizard = state.auditWizard;
+  if (sharedApi && wizard.editingAuditId) { wizard.step = 2; return renderAuditWizardScreen(); }
+  const types = sharedApi ? wizard.study.allowedAuditTypes || [] : ['intersection', 'street-segment'];
+  const paged = document.body.classList.contains('text-zoomed');
+  wizard.typePage = Math.max(0, Math.min(wizard.typePage || 0, types.length - 1));
+  const visibleTypes = paged ? types.slice(wizard.typePage, wizard.typePage + 1) : types;
   appRoot.innerHTML = auditWizardFrame({
     step: 1,
     title: 'What are you auditing?',
     help: 'Choose the kind of mapped location your observation describes.',
-    content: `<div class="choice-grid" role="radiogroup" aria-label="Audit type">
-      <label class="choice-card ${wizard.draft.type === 'intersection' ? 'is-selected' : ''}">
-        <input type="radio" name="audit-type" value="intersection" ${wizard.draft.type === 'intersection' ? 'checked' : ''}>
-        <span class="choice-icon" aria-hidden="true">＋</span>
-        <span>
-          <span class="choice-title">Intersection</span>
-          <span class="choice-description">A crossing where two or more streets meet.</span>
-        </span>
-      </label>
-      <label class="choice-card ${wizard.draft.type === 'street-segment' ? 'is-selected' : ''}">
-        <input type="radio" name="audit-type" value="street-segment" ${wizard.draft.type === 'street-segment' ? 'checked' : ''}>
-        <span class="choice-icon" aria-hidden="true">━</span>
-        <span>
-          <span class="choice-title">Street segment</span>
-          <span class="choice-description">The length of a street between two intersections.</span>
-        </span>
-      </label>
+    content: `<div class="${sharedApi ? 'option-list compact-type-list' : 'choice-grid'}" role="radiogroup" aria-label="Audit type">
+      ${visibleTypes.map(type => `<label class="${sharedApi ? 'option-row' : 'choice-card'} ${wizard.draft.type === type ? 'is-selected' : ''}">
+        <input type="radio" name="audit-type" value="${type}" ${wizard.draft.type === type ? 'checked' : ''}>
+        <span><span class="choice-title">${escapeHtml(studyTypeNames[type])}</span><span class="choice-description">${type === 'intersection' ? 'A crossing where streets meet.' : type === 'point' ? 'One spot along a mapped street.' : sharedApi ? 'A route between a crossing and a street point.' : 'One mapped street segment.'}</span></span>
+      </label>`).join('')}
     </div>
+    ${paged && types.length > 1 ? `<div class="type-page-controls"><button class="button is-light" id="type-prev-page" type="button" ${wizard.typePage === 0 ? 'disabled' : ''}>Previous type</button><span class="help">${wizard.typePage + 1} / ${types.length}</span><button class="button is-light" id="type-next-page" type="button" ${wizard.typePage === types.length - 1 ? 'disabled' : ''}>More types</button></div>` : ''}
     <div id="audit-step-error" class="error-notice mt-4" hidden></div>
     <div class="wizard-actions">
       <button class="button is-light" id="audit-cancel" type="button">Back to study</button>
       <button class="button is-primary" id="type-next" type="button" ${wizard.draft.type ? '' : 'disabled'}>Next</button>
     </div>`
   });
+  document.querySelector('#type-prev-page')?.addEventListener('click', () => { wizard.typePage--; Promise.resolve(renderAuditWizardScreen()).then(() => restorePagerFocus('#type-prev-page', '#type-next-page')); });
+  document.querySelector('#type-next-page')?.addEventListener('click', () => { wizard.typePage++; Promise.resolve(renderAuditWizardScreen()).then(() => restorePagerFocus('#type-next-page', '#type-prev-page')); });
 
   document.querySelectorAll('input[name="audit-type"]').forEach((input) => input.addEventListener('change', () => {
     const changed = wizard.draft.type && wizard.draft.type !== input.value;
     wizard.draft.type = input.value;
     if (changed) Object.assign(wizard.draft, {
-      worksheetId: null, locationGps: null, locationDescription: null, geojson: null, answers: {}
+      worksheetId: null, featureId: null, locationGps: null, locationDescription: null, geojson: null, routeSelection: null, answers: {}
     });
-    document.querySelectorAll('.choice-card').forEach((card) => card.classList.toggle('is-selected', card.contains(input)));
+    if (changed) { wizard.worksheets = null; wizard.routeState = null; wizard.selectedFeature = null; wizard.replaceLegacyRoute = false; }
+    document.querySelectorAll('.choice-card, .compact-type-list .option-row').forEach((card) => card.classList.toggle('is-selected', card.contains(input)));
     document.querySelector('#type-next').disabled = false;
     writeAuditCache();
   }));
@@ -1288,8 +1566,13 @@ function renderAuditTypeStep() {
   document.querySelector('#type-next').addEventListener('click', async (event) => {
     const button = event.currentTarget;
     button.classList.add('is-loading');
+    button.disabled = true;
+    const choices = [...document.querySelectorAll('input[name="audit-type"]')];
+    const pagers = [...document.querySelectorAll('#type-prev-page, #type-next-page')].map(element => ({ element, disabled: element.disabled }));
+    choices.forEach(choice => { choice.disabled = true; });
+    pagers.forEach(item => { item.element.disabled = true; });
     try {
-      await persistAuditDraft({
+      await persistAuditDraft(sharedApi ? { type: wizard.draft.type } : {
         type: wizard.draft.type,
         worksheetId: wizard.draft.worksheetId,
         locationGps: wizard.draft.locationGps,
@@ -1301,9 +1584,12 @@ function renderAuditTypeStep() {
       renderAuditWizardScreen();
     } catch (error) {
       const errorBox = document.querySelector('#audit-step-error');
-      errorBox.textContent = error.message;
-      errorBox.hidden = false;
+      if (sharedApi) showBoundedError(errorBox, error.message);
+      else { errorBox.textContent = error.message; errorBox.hidden = false; }
       button.classList.remove('is-loading');
+      button.disabled = false;
+      choices.forEach(choice => { choice.disabled = false; });
+      pagers.forEach(item => { item.element.disabled = item.disabled; });
     }
   });
   pageReady();
@@ -1372,7 +1658,8 @@ function nearestStudyFeature(study, type, latlng) {
 
 function renderAuditLocationStep() {
   const wizard = state.auditWizard;
-  const typeLabel = wizard.draft.type === 'intersection' ? 'intersection' : 'street segment';
+  if (sharedApi && wizard.draft.type === 'street-segment') return renderRouteLocationStep();
+  const typeLabel = wizard.draft.type === 'intersection' ? 'intersection' : wizard.draft.type === 'point' ? 'point' : 'street segment';
   appRoot.innerHTML = auditWizardFrame({
     step: 2,
     title: `Pin the ${typeLabel}`,
@@ -1396,14 +1683,21 @@ function renderAuditLocationStep() {
   });
   initializeAuditLocationMap();
   document.querySelector('#location-back').addEventListener('click', () => {
+    if (sharedApi && wizard.editingAuditId) return navigate(`/studies/${wizard.studyId}`);
     wizard.step = 1;
     renderAuditWizardScreen();
   });
   document.querySelector('#location-next').addEventListener('click', async (event) => {
     const button = event.currentTarget;
     button.classList.add('is-loading');
+    button.disabled = true;
+    wizard.locationSaving = true;
+    wizard.locationMarker?.dragging?.disable();
+    document.querySelector('#audit-locate').disabled = true;
+    document.querySelector('#location-back').disabled = true;
     try {
       await persistAuditDraft({
+        ...(sharedApi ? { featureId: wizard.draft.featureId } : {}),
         locationGps: wizard.draft.locationGps,
         locationDescription: wizard.draft.locationDescription,
         geojson: wizard.selectedFeature
@@ -1415,6 +1709,11 @@ function renderAuditLocationStep() {
       errorBox.textContent = error.message;
       errorBox.hidden = false;
       button.classList.remove('is-loading');
+      button.disabled = false;
+      wizard.locationSaving = false;
+      wizard.locationMarker?.dragging?.enable();
+      document.querySelector('#audit-locate').disabled = false;
+      document.querySelector('#location-back').disabled = false;
     }
   });
   pageReady();
@@ -1422,18 +1721,18 @@ function renderAuditLocationStep() {
 
 function initializeAuditLocationMap() {
   const wizard = state.auditWizard;
+  wizard.locationSaving = false;
   const map = createMap('audit-location-map', { scrollWheelZoom: true });
+  const hadSavedLocation = Boolean(wizard.draft.locationGps);
+  let manuallyMoved = false;
   const center = wizard.draft.locationGps
     ? [wizard.draft.locationGps.latitude, wizard.draft.locationGps.longitude]
     : areaCenter(wizard.study.area);
-  map.setView(center, wizard.draft.locationGps ? 18 : 16);
+  map.setView(center, map._walkAuditTileLayer.options.maxZoom || 19);
   const areaLayer = L.geoJSON(wizard.study.area, {
     style: { color: '#9a7700', weight: 3, fillColor: '#f5c842', fillOpacity: 0.16 }
   }).addTo(map);
-  if (!wizard.draft.locationGps) {
-    const bounds = areaLayer.getBounds();
-    if (bounds.isValid()) map.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
-  }
+  map.on('dragstart zoomstart', () => { manuallyMoved = true; });
 
   const marker = L.marker(center, { draggable: true, keyboard: true, title: 'Audit location pin' }).addTo(map);
   wizard.locationMarker = marker;
@@ -1449,14 +1748,17 @@ function initializeAuditLocationMap() {
       return;
     }
     const changedFeature = wizard.draft.geojson?.properties?.id !== match.feature.properties.id;
-    wizard.selectedFeature = structuredClone(match.feature);
-    wizard.draft.geojson = structuredClone(match.feature);
+    wizard.selectedFeature = sharedApi && wizard.draft.type === 'point'
+      ? { type: 'Feature', properties: structuredClone(match.feature.properties), geometry: { type: 'Point', coordinates: [match.latlng[1], match.latlng[0]] } }
+      : structuredClone(match.feature);
+    wizard.draft.featureId = match.feature.properties.id;
+    wizard.draft.geojson = structuredClone(wizard.selectedFeature);
     wizard.draft.locationGps = sharedApi
       ? { latitude: match.latlng[0], longitude: match.latlng[1] }
       : { latitude: latlng.lat, longitude: latlng.lng };
     if (changedFeature || !wizard.draft.locationDescription) {
       wizard.draft.locationDescription = match.feature.properties?.description || match.feature.properties?.name
-        || (wizard.draft.type === 'intersection' ? 'Selected intersection' : 'Selected street segment');
+        || (wizard.draft.type === 'intersection' ? 'Selected intersection' : wizard.draft.type === 'point' ? 'Selected point' : 'Selected street segment');
     }
     highlighted = L.geoJSON(match.feature, {
       style: { color: '#d3263e', weight: 9, opacity: 1 },
@@ -1474,6 +1776,7 @@ function initializeAuditLocationMap() {
     writeAuditCache();
   }
 
+  marker.on('dragstart', () => { manuallyMoved = true; });
   marker.on('dragend', (event) => updateSelection(event.target.getLatLng()));
   marker.on('drag', (event) => {
     const latlng = event.target.getLatLng();
@@ -1481,10 +1784,11 @@ function initializeAuditLocationMap() {
   });
   updateSelection(marker.getLatLng());
 
-  function usePosition(position) {
+  function usePosition(position, explicit = false) {
+    if (!state.activeMaps.includes(map) || wizard.locationSaving || (!explicit && manuallyMoved)) return;
     const latlng = L.latLng(position.coords.latitude, position.coords.longitude);
     marker.setLatLng(latlng);
-    map.setView(latlng, 18);
+    map.setView(latlng, map._walkAuditTileLayer.options.maxZoom || 19);
     if (accuracyCircle) map.removeLayer(accuracyCircle);
     accuracyCircle = L.circle(latlng, {
       radius: Math.min(position.coords.accuracy, 200),
@@ -1493,13 +1797,166 @@ function initializeAuditLocationMap() {
     updateSelection(latlng);
   }
 
-  document.querySelector('#audit-locate').addEventListener('click', () => locateMap(map, usePosition));
-  if (!wizard.draft.locationGps && navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(usePosition, () => {}, {
+  document.querySelector('#audit-locate').addEventListener('click', () => locateMap(map, position => usePosition(position, true)));
+  if (!hadSavedLocation && navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(position => usePosition(position), () => {}, {
       enableHighAccuracy: true, timeout: 10_000, maximumAge: 15_000
     });
   }
   scheduleMapResize(map);
+}
+
+function renderRouteLocationStep() {
+  const wizard = state.auditWizard;
+  const legacy = wizard.editingAuditId && !wizard.draft.routeSelection;
+  if (legacy && !wizard.originalLegacyLocation) wizard.originalLegacyLocation = {
+    featureId: wizard.draft.featureId, locationGps: structuredClone(wizard.draft.locationGps), geojson: structuredClone(wizard.draft.geojson)
+  };
+  const keepingLegacy = legacy && !wizard.replaceLegacyRoute;
+  appRoot.innerHTML = auditWizardFrame({ step: 2, title: keepingLegacy ? 'Current street location' : 'Choose a street route', help: 'Start at an intersection, then choose an endpoint on a street.', mapStep: true, content: `
+    <div class="map-shell audit-map-shell"><div id="audit-location-map" class="map-canvas" role="region" aria-label="Map for selecting the street route"></div><div class="map-overlay-controls"><button class="map-control-button" id="audit-locate" type="button" aria-label="Use my current location">◎</button></div></div>
+    <div class="location-readout route-readout" aria-live="polite"><div><strong id="route-status">${keepingLegacy ? 'Your existing street location is unchanged.' : 'Choose start A at an intersection.'}</strong><p class="help" id="route-detail">${keepingLegacy ? 'Keep this location, or replace it with a two-pin route.' : ''}</p></div>
+      ${keepingLegacy ? '' : `<div class="route-controls"><button class="button is-light" id="route-select-a" type="button">Start A</button><button class="button is-light" id="route-select-b" type="button">End B</button><button class="button is-light" id="route-show" type="button">Show route</button></div>`}</div>
+    <div id="audit-location-error" class="error-notice" hidden></div>
+    <div class="wizard-actions"><button class="button is-light" id="route-back" type="button">${wizard.replaceLegacyRoute ? 'Cancel change' : 'Back'}</button><button class="button is-primary" id="route-next" type="button">${keepingLegacy ? 'Keep location' : 'Confirm start A'}</button>${keepingLegacy ? '<button class="button is-link" id="route-replace" type="button">Replace location</button>' : ''}</div>` });
+  const map = createMap('audit-location-map', { scrollWheelZoom: true });
+  const savedEnd = (wizard.routeState?.phase === 'end' && wizard.routeState.end?.locationGps) || wizard.draft.routeSelection?.end?.locationGps;
+  const startPosition = savedEnd || wizard.draft.locationGps;
+  const center = startPosition ? [startPosition.latitude, startPosition.longitude] : areaCenter(wizard.study.area);
+  map.setView(center, map._walkAuditTileLayer.options.maxZoom || 19);
+  L.geoJSON(wizard.study.area, { style: { color: '#9a7700', weight: 3, fillColor: '#f5c842', fillOpacity: 0.12 } }).addTo(map);
+  L.geoJSON(wizard.study.segments, { style: { color: '#526e73', weight: 3, opacity: 0.6 } }).addTo(map);
+  const back = document.querySelector('#route-back'), next = document.querySelector('#route-next'), errorBox = document.querySelector('#audit-location-error');
+  if (keepingLegacy) {
+    if (wizard.draft.geojson) L.geoJSON(wizard.draft.geojson, { style: { color: '#d3263e', weight: 8 } }).addTo(map);
+    document.querySelector('#route-replace').addEventListener('click', () => { wizard.replaceLegacyRoute = true; wizard.routeState = null; renderAuditWizardScreen(); });
+    next.addEventListener('click', () => { wizard.step = 3; renderAuditWizardScreen(); });
+    back.addEventListener('click', () => navigate(`/studies/${wizard.studyId}`));
+    document.querySelector('#audit-locate').addEventListener('click', () => locateMap(map, position => map.setView([position.coords.latitude, position.coords.longitude], map._walkAuditTileLayer.options.maxZoom || 19)));
+    scheduleMapResize(map); pageReady(); return;
+  }
+  const saved = wizard.draft.routeSelection;
+  const route = wizard.routeState || (wizard.routeState = { startId: saved?.startIntersectionId || null, end: saved?.end || null, phase: saved?.startIntersectionId ? 'end' : 'start', preview: null });
+  let previewTimer, previewSequence = 0, previewController, highlighted, routeLayer, otherMarker, manual = false, saving = false, candidate = null;
+  const initialSaved = Boolean(startPosition);
+  const icon = label => L.divIcon({ className: '', html: `<span class="route-pin">${label}</span>`, iconSize: [36, 36], iconAnchor: [18, 18] });
+  const marker = L.marker(center, { draggable: true, keyboard: true, icon: icon(route.phase === 'start' ? 'A' : 'B'), title: 'Route endpoint' }).addTo(map);
+  const oldCleanup = map._walkAuditCleanup;
+  map._walkAuditCleanup = () => { clearTimeout(previewTimer); previewController?.abort(); oldCleanup?.(); };
+  map.on('dragstart zoomstart', () => { manual = true; });
+  marker.on('dragstart', () => { manual = true; });
+
+  function updateOtherMarker() {
+    if (otherMarker) map.removeLayer(otherMarker);
+    if (route.phase === 'end' && route.startId) {
+      const start = wizard.study.intersections.features.find(feature => feature.properties.id === route.startId);
+      if (start) otherMarker = L.marker([start.geometry.coordinates[1], start.geometry.coordinates[0]], { icon: icon('A'), interactive: false }).addTo(map);
+    } else if (route.phase === 'start' && route.end) {
+      otherMarker = L.marker([route.end.locationGps.latitude, route.end.locationGps.longitude], { icon: icon('B'), interactive: false }).addTo(map);
+    }
+  }
+  function updateControls() {
+    document.querySelector('#route-select-a').disabled = route.phase === 'start';
+    document.querySelector('#route-select-b').disabled = !route.startId || route.phase === 'end';
+    document.querySelector('#route-show').disabled = !route.preview;
+    next.textContent = route.phase === 'start' ? 'Confirm start A' : 'Next';
+    next.disabled = route.phase === 'start' ? !candidate : !route.preview;
+    updateOtherMarker();
+  }
+  function clearPreview() {
+    previewSequence++; clearTimeout(previewTimer); previewController?.abort(); route.preview = null;
+    if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
+  }
+  function preview() {
+    clearPreview();
+    if (!route.startId || !route.end) { updateControls(); return; }
+    const sequence = previewSequence;
+    const intent = { startIntersectionId: route.startId, end: structuredClone(route.end) };
+    document.querySelector('#route-detail').textContent = 'Finding the shortest connected route…';
+    previewTimer = setTimeout(async () => {
+      previewController = new AbortController();
+      try {
+        const result = await sharedApi.previewRoute(wizard.studyId, intent, previewController.signal);
+        if (sequence !== previewSequence || !state.activeMaps.includes(map)) return;
+        route.preview = result;
+        routeLayer = L.geoJSON(result.geojson, { style: { color: '#d3263e', weight: 8, opacity: 0.95 } }).addTo(map);
+        document.querySelector('#route-detail').textContent = `${Math.round(result.routeSelection.lengthMeters)} m along the study network.`;
+        errorBox.hidden = true;
+      } catch (error) {
+        if (sequence !== previewSequence || !state.activeMaps.includes(map)) return;
+        document.querySelector('#route-detail').textContent = error.message;
+      }
+      updateControls();
+    }, 300);
+    updateControls();
+  }
+  function select(latlng) {
+    if (highlighted) map.removeLayer(highlighted);
+    const match = nearestStudyFeature(wizard.study, route.phase === 'start' ? 'intersection' : 'street-segment', [latlng.lat, latlng.lng]);
+    if (!match) {
+      candidate = null; if (route.phase === 'end') { route.end = null; clearPreview(); }
+      document.querySelector('#route-status').textContent = route.phase === 'start' ? 'No mapped intersection is available.' : 'No mapped street is available.';
+      updateControls(); return;
+    }
+    candidate = match; marker.setLatLng(match.latlng);
+    highlighted = L.geoJSON(match.feature, { style: { color: '#d3263e', weight: 7 }, pointToLayer: (_feature, point) => L.circleMarker(point, { radius: 10, color: '#fff', weight: 3, fillColor: '#d3263e', fillOpacity: 1 }) }).addTo(map);
+    document.querySelector('#route-status').textContent = route.phase === 'start' ? 'Start A: select an intersection' : 'End B: select a street or midblock point';
+    if (route.phase === 'end') {
+      route.end = { featureId: match.feature.properties.id, locationGps: { longitude: match.latlng[1], latitude: match.latlng[0] } };
+      preview();
+    } else { clearPreview(); document.querySelector('#route-detail').textContent = match.feature.properties.name || 'Drag A to the starting intersection.'; updateControls(); }
+  }
+  marker.on('dragend', event => select(event.target.getLatLng()));
+  document.querySelector('#route-select-a').addEventListener('click', () => {
+    route.phase = 'start'; marker.setIcon(icon('A'));
+    const start = wizard.study.intersections.features.find(feature => feature.properties.id === route.startId);
+    if (start) { marker.setLatLng([start.geometry.coordinates[1], start.geometry.coordinates[0]]); map.setView(marker.getLatLng(), map.getZoom()); }
+    select(marker.getLatLng());
+  });
+  document.querySelector('#route-select-b').addEventListener('click', () => {
+    route.phase = 'end'; marker.setIcon(icon('B'));
+    if (route.end) marker.setLatLng([route.end.locationGps.latitude, route.end.locationGps.longitude]);
+    map.setView(marker.getLatLng(), map.getZoom()); select(marker.getLatLng());
+  });
+  document.querySelector('#route-show').addEventListener('click', () => { const bounds = routeLayer?.getBounds(); if (bounds?.isValid()) map.fitBounds(bounds, { padding: [50, 50], maxZoom: 19 }); });
+  next.addEventListener('click', async () => {
+    next.disabled = true; errorBox.hidden = true; saving = true;
+    marker.dragging.disable(); back.disabled = true;
+    document.querySelector('#audit-locate').disabled = true;
+    document.querySelector('#route-select-a').disabled = true;
+    document.querySelector('#route-select-b').disabled = true;
+    try {
+      if (route.phase === 'start') {
+        route.startId = candidate.feature.properties.id;
+        await persistAuditDraft({ routeSelection: { startIntersectionId: route.startId } });
+        route.phase = 'end'; renderAuditWizardScreen();
+      } else {
+        if (!route.preview) return;
+        await persistAuditDraft({ routeSelection: { startIntersectionId: route.startId, end: route.end }, locationDescription: wizard.draft.locationDescription || 'Selected street route' });
+        wizard.step = 3; renderAuditWizardScreen();
+      }
+    } catch (error) { errorBox.textContent = error.message; errorBox.hidden = false; saving = false; marker.dragging.enable(); back.disabled = false; document.querySelector('#audit-locate').disabled = false; updateControls(); }
+  });
+  back.addEventListener('click', async () => {
+    if (wizard.replaceLegacyRoute && wizard.originalLegacyLocation) {
+      back.disabled = true;
+      try {
+        if (wizard.draft.routeSelection) await persistAuditDraft({ routeSelection: null, ...wizard.originalLegacyLocation });
+        wizard.replaceLegacyRoute = false; wizard.routeState = null; renderAuditWizardScreen();
+      } catch (error) { errorBox.textContent = error.message; errorBox.hidden = false; back.disabled = false; }
+      return;
+    }
+    if (wizard.editingAuditId) return navigate(`/studies/${wizard.studyId}`);
+    wizard.step = 1; renderAuditWizardScreen();
+  });
+  function usePosition(position, explicit = false) {
+    if (!state.activeMaps.includes(map) || saving || (!explicit && manual)) return;
+    const latlng = [position.coords.latitude, position.coords.longitude]; marker.setLatLng(latlng); map.setView(latlng, map._walkAuditTileLayer.options.maxZoom || 19); select(marker.getLatLng());
+  }
+  document.querySelector('#audit-locate').addEventListener('click', () => locateMap(map, position => usePosition(position, true)));
+  select(marker.getLatLng());
+  if (!initialSaved && navigator.geolocation) navigator.geolocation.getCurrentPosition(position => usePosition(position), () => {}, { enableHighAccuracy: true, timeout: 10000, maximumAge: 15000 });
+  scheduleMapResize(map); pageReady();
 }
 
 function renderAuditDescriptionStep() {
@@ -1542,6 +1999,9 @@ function renderAuditDescriptionStep() {
     }
     const button = event.currentTarget;
     button.classList.add('is-loading');
+    button.disabled = true;
+    input.disabled = true;
+    document.querySelector('#description-back').disabled = true;
     try {
       await persistAuditDraft({ locationDescription: description });
       wizard.step = 4;
@@ -1550,6 +2010,9 @@ function renderAuditDescriptionStep() {
       errorBox.textContent = error.message;
       errorBox.hidden = false;
       button.classList.remove('is-loading');
+      button.disabled = false;
+      input.disabled = false;
+      document.querySelector('#description-back').disabled = false;
     }
   });
   initializeFeaturePreviewMap('description-map', wizard.study.area, wizard.draft.geojson, wizard.draft.locationGps);
@@ -1589,6 +2052,14 @@ function initializeFeaturePreviewMap(elementId, area, feature, locationGps) {
 async function ensureWorksheets() {
   const wizard = state.auditWizard;
   if (wizard.worksheets?.type === wizard.draft.type) return wizard.worksheets.items;
+  if (sharedApi) {
+    const definition = wizard.study.questionnaires?.[wizard.draft.type];
+    const worksheet = wizard.editingAuditId && wizard.draft.worksheetId !== definition?.id
+      ? await sharedApi.worksheet(wizard.draft.worksheetId) : definition;
+    if (!worksheet || worksheet.id !== wizard.draft.worksheetId) throw new Error('This draft does not match the study questions. Start a separate draft to continue.');
+    wizard.worksheets = { type: wizard.draft.type, items: [worksheet] };
+    return wizard.worksheets.items;
+  }
   const result = await api(`/api/worksheets?type=${encodeURIComponent(wizard.draft.type)}`);
   wizard.worksheets = { type: wizard.draft.type, items: result.worksheets };
   return result.worksheets;
@@ -1599,23 +2070,29 @@ async function renderWorksheetStep() {
   appRoot.innerHTML = loadingMarkup('Loading recommended worksheets…');
   const worksheets = await ensureWorksheets();
   if (state.auditWizard !== wizard || wizard.step !== 4) return;
+  const pages = worksheets.flatMap(worksheet => splitDisplayText(worksheet.description || '', 120).map(description => ({ worksheet, description })));
+  wizard.worksheetPage = Math.max(0, Math.min(wizard.worksheetPage || 0, pages.length - 1));
+  const page = pages[wizard.worksheetPage];
   appRoot.innerHTML = auditWizardFrame({
     step: 4,
     title: 'Choose a worksheet',
     help: `These worksheets are recommended for a ${wizard.draft.type === 'intersection' ? 'single intersection' : 'street segment'}.`,
     content: `<div class="option-list" role="radiogroup" aria-label="Recommended worksheets">
-      ${worksheets.map((worksheet) => `<label class="option-row">
-        <input type="radio" name="worksheet" value="${worksheet.id}" ${wizard.draft.worksheetId === worksheet.id ? 'checked' : ''}>
-        <span><strong>${escapeHtml(worksheet.title)}</strong><br><span class="help">${escapeHtml(worksheet.description)}</span></span>
-      </label>`).join('')}
+      ${page ? `<label class="option-row">
+        <input type="radio" name="worksheet" value="${page.worksheet.id}" ${wizard.draft.worksheetId === page.worksheet.id ? 'checked' : ''}>
+        <span><strong>${escapeHtml(page.worksheet.title)}</strong><br><span class="help">${escapeHtml(page.description)}</span></span>
+      </label>` : '<p>No worksheets are available for this type.</p>'}
     </div>
-    <p class="help mt-4"><a href="${escapeHtml(worksheets[0]?.sourceUrl || '#')}" target="_blank" rel="noopener">${sharedApi ? 'Worksheet background and walking guidance' : 'AARP Walk Audit Tool Kit worksheets'}</a>.</p>
+    ${pages.length > 1 ? `<div class="worksheet-page-controls"><button class="button is-light" id="worksheet-prev-page" type="button" ${wizard.worksheetPage === 0 ? 'disabled' : ''}>Previous</button><span class="help">${wizard.worksheetPage + 1} / ${pages.length}</span><button class="button is-light" id="worksheet-next-page" type="button" ${wizard.worksheetPage === pages.length - 1 ? 'disabled' : ''}>More choices</button></div>` : ''}
+    <p class="help mt-3"><a href="${escapeHtml(page?.worksheet.sourceUrl || '#')}" target="_blank" rel="noopener">AARP Walk Audit Tool Kit worksheets</a>.</p>
     <div id="worksheet-error" class="error-notice mt-3" hidden></div>
     <div class="wizard-actions">
       <button class="button is-light" id="worksheet-back" type="button">Back</button>
       <button class="button is-primary" id="worksheet-next" type="button" ${wizard.draft.worksheetId ? '' : 'disabled'}>Next</button>
     </div>`
   });
+  document.querySelector('#worksheet-prev-page')?.addEventListener('click', () => { wizard.worksheetPage--; Promise.resolve(renderAuditWizardScreen()).then(() => restorePagerFocus('#worksheet-prev-page', '#worksheet-next-page')); });
+  document.querySelector('#worksheet-next-page')?.addEventListener('click', () => { wizard.worksheetPage++; Promise.resolve(renderAuditWizardScreen()).then(() => restorePagerFocus('#worksheet-next-page', '#worksheet-prev-page')); });
   document.querySelectorAll('input[name="worksheet"]').forEach((input) => input.addEventListener('change', () => {
     const previous = wizard.draft.worksheetId;
     wizard.draft.worksheetId = Number(input.value);
@@ -1630,6 +2107,7 @@ async function renderWorksheetStep() {
   document.querySelector('#worksheet-next').addEventListener('click', async (event) => {
     const button = event.currentTarget;
     button.classList.add('is-loading');
+    button.disabled = true;
     try {
       await persistAuditDraft({ worksheetId: wizard.draft.worksheetId, answers: wizard.draft.answers });
       wizard.questionIndex = 0;
@@ -1640,6 +2118,7 @@ async function renderWorksheetStep() {
       errorBox.textContent = error.message;
       errorBox.hidden = false;
       button.classList.remove('is-loading');
+      button.disabled = false;
     }
   });
   pageReady();
@@ -1650,7 +2129,18 @@ function selectedWorksheet() {
   return wizard.worksheets?.items?.find((worksheet) => worksheet.id === wizard.draft.worksheetId) || null;
 }
 
-function promptControl(prompt, answer) {
+function splitDisplayText(value, limit = 110) {
+  let remaining = String(value || '').trim(); const pages = [];
+  while (remaining.length > limit) {
+    let cut = remaining.lastIndexOf(' ', limit);
+    if (cut < limit / 2) cut = limit;
+    pages.push(remaining.slice(0, cut).trim()); remaining = remaining.slice(cut).trim();
+  }
+  if (remaining || !pages.length) pages.push(remaining);
+  return pages;
+}
+
+function promptControl(prompt, answer, visibleOptions = prompt.options) {
   if (prompt.type === 'textarea') {
     return `<div class="field"><label class="sr-only" for="prompt-answer">${escapeHtml(prompt.label)}</label>
       <textarea class="textarea" id="prompt-answer" maxlength="${prompt.maxLength || 2000}" rows="6" placeholder="Type your observation…">${escapeHtml(answer || '')}</textarea></div>`;
@@ -1658,8 +2148,8 @@ function promptControl(prompt, answer) {
   const multiple = prompt.type === 'multi-choice';
   const selected = multiple ? (Array.isArray(answer) ? answer : []) : [String(answer ?? '')];
   return `<div class="option-list" role="${multiple ? 'group' : 'radiogroup'}" aria-label="${escapeHtml(prompt.label)}">
-    ${(prompt.options || []).map((option) => `<label class="option-row">
-      <input type="${multiple ? 'checkbox' : 'radio'}" name="prompt-answer" value="${escapeHtml(option.value)}" ${selected.includes(String(option.value)) ? 'checked' : ''}>
+    ${(visibleOptions || []).map((option) => `<label class="option-row">
+      <input type="${multiple ? 'checkbox' : 'radio'}" name="prompt-answer" value="${escapeHtml(option.value)}" ${option.clearAnswer ? 'data-clear-answer="true"' : ''} ${selected.includes(String(option.value)) ? 'checked' : ''}>
       <span>${escapeHtml(option.label)}</span>
     </label>`).join('')}
   </div>`;
@@ -1667,13 +2157,17 @@ function promptControl(prompt, answer) {
 
 function readPromptAnswer(prompt) {
   if (prompt.type === 'textarea') {
-    const value = document.querySelector('#prompt-answer').value.trim();
+    const field = document.querySelector('#prompt-answer');
+    if (!field) return state.auditWizard.draft.answers?.[prompt.id] ?? null;
+    const value = field.value.trim();
     return value || null;
   }
   if (prompt.type === 'multi-choice') {
     return [...document.querySelectorAll('input[name="prompt-answer"]:checked')].map((input) => input.value);
   }
-  return document.querySelector('input[name="prompt-answer"]:checked')?.value || null;
+  const selected = document.querySelector('input[name="prompt-answer"]:checked');
+  if (selected?.dataset.clearAnswer) return null;
+  return selected?.value || (sharedApi ? state.auditWizard.draft.answers?.[prompt.id] : null) || null;
 }
 
 async function renderQuestionStep() {
@@ -1681,18 +2175,42 @@ async function renderQuestionStep() {
   if (!wizard.worksheets) await ensureWorksheets();
   const worksheet = selectedWorksheet();
   if (!worksheet) {
-    wizard.step = 4;
+    wizard.step = sharedApi ? 3 : 4;
     return renderAuditWizardScreen();
   }
   const prompts = worksheet.prompts || [];
   if (!prompts.length) {
-    wizard.step = 6;
+    wizard.step = sharedApi ? 5 : 6;
     return renderAuditWizardScreen();
   }
   wizard.questionIndex = Math.min(wizard.questionIndex, prompts.length - 1);
   const prompt = prompts[wizard.questionIndex];
   const answer = wizard.draft.answers?.[prompt.id];
-  appRoot.innerHTML = `<section class="wizard-shell">
+  const contentKey = `${worksheet.id}:${prompt.id}`;
+  if (wizard.contentKey !== contentKey) { wizard.contentKey = contentKey; wizard.contentPage = 0; }
+  const zoomScale = Math.max(1, parseFloat(getComputedStyle(document.documentElement).fontSize) / 16);
+  const labelLimit = zoomScale > 1.25 ? Math.max(25, Math.floor(80 / zoomScale)) : 110;
+  const labelPages = sharedApi ? splitDisplayText(prompt.label, labelLimit) : [prompt.label];
+  const optionPages = [];
+  if (sharedApi && prompt.type !== 'textarea') {
+    const limit = zoomScale > 1.25 ? Math.max(25, Math.floor(70 / zoomScale)) : 115;
+    for (const [index, option] of (prompt.options || []).entries()) {
+      const chunks = zoomScale > 1.25 ? splitDisplayText(option.label, limit) : [option.label];
+      for (const [part, chunk] of chunks.entries()) {
+        const displayed = chunks.length > 1 ? { ...option, label: `${chunk} (${part + 1}/${chunks.length})` } : option;
+        let group = optionPages.at(-1);
+        if (!group || chunks.length > 1 || group.length >= (zoomScale > 1.25 ? 1 : 3) || group.reduce((sum, item) => sum + item.label.length, 0) + displayed.label.length > limit) { group = []; optionPages.push(group); }
+        group.push(displayed);
+      }
+    }
+  }
+  if (!optionPages.length) optionPages.push(prompt.options || []);
+  if (sharedApi && prompt.optional && prompt.type === 'single-choice') optionPages.push([{ value: '', label: 'Clear answer', clearAnswer: true }]);
+  const answerPage = labelPages.length - 1, pageCount = answerPage + optionPages.length;
+  wizard.contentPage = Math.max(0, Math.min(wizard.contentPage || 0, pageCount - 1));
+  const showAnswer = wizard.contentPage >= answerPage;
+  const visibleOptions = optionPages[Math.max(0, wizard.contentPage - answerPage)];
+  appRoot.innerHTML = `<section class="wizard-shell ${sharedApi ? 'compact-question' : ''}">
     <div class="wizard-topline">
       <p class="eyebrow mb-0">${escapeHtml(worksheet.title)}</p>
       <span class="step-label">Question ${wizard.questionIndex + 1} of ${prompts.length}</span>
@@ -1700,14 +2218,15 @@ async function renderQuestionStep() {
     <div class="progress-track" role="progressbar" aria-label="Worksheet questions" aria-valuemin="1" aria-valuemax="${prompts.length}" aria-valuenow="${wizard.questionIndex + 1}">
       <div class="progress-fill" style="width:${((wizard.questionIndex + 1) / prompts.length) * 100}%"></div>
     </div>
-    <h1 class="wizard-question">${escapeHtml(prompt.label)}</h1>
+    <h1 class="wizard-question">${escapeHtml(labelPages[Math.min(wizard.contentPage, labelPages.length - 1)])}</h1>
     ${prompt.help ? `<p class="wizard-help">${escapeHtml(prompt.help)}</p>` : ''}
-    ${promptControl(prompt, answer)}
-    ${prompt.optional ? '<p class="help mt-3">Optional — you can leave this blank.</p>' : `<p class="help mt-3">${sharedApi ? 'Choose an answer before continuing.' : 'You can skip any question by tapping Next without choosing an answer.'}</p>`}
+    ${showAnswer ? promptControl(prompt, answer, visibleOptions) : '<p class="help">More of this question follows.</p>'}
+    ${pageCount > 1 ? `<p class="help question-part">Part ${wizard.contentPage + 1} of ${pageCount}${answer ? ' · Answer selected' : ''}</p>` : ''}
+    ${showAnswer ? (prompt.optional ? '<p class="help mt-3">Optional — you can leave this blank.</p>' : `<p class="help mt-3">${sharedApi ? 'Choose an answer before continuing.' : 'You can skip any question by tapping Next without choosing an answer.'}</p>`) : ''}
     <div id="question-error" class="error-notice mt-3" hidden></div>
     <div class="wizard-actions">
       <button class="button is-light" id="question-back" type="button">Back</button>
-      <button class="button is-primary" id="question-next" type="button">${wizard.questionIndex === prompts.length - 1 ? 'Review audit' : 'Next'}</button>
+      <button class="button is-primary" id="question-next" type="button">${wizard.contentPage < pageCount - 1 ? 'Next part' : wizard.questionIndex === prompts.length - 1 ? 'Review audit' : 'Next'}</button>
     </div>
   </section>`;
 
@@ -1737,7 +2256,7 @@ async function renderQuestionStep() {
         catch (error) {
           if (state.auditWizard !== wizard) return;
           const errorBox = document.querySelector('#question-error');
-          if (errorBox) { errorBox.textContent = error.message; errorBox.hidden = false; }
+          if (errorBox) { if (sharedApi) showBoundedError(errorBox, error.message); else { errorBox.textContent = error.message; errorBox.hidden = false; } }
           else showToast(error.message, 'error');
         }
       }, 700);
@@ -1747,20 +2266,25 @@ async function renderQuestionStep() {
   document.querySelectorAll('input[name="prompt-answer"]').forEach(input => input.addEventListener('change', rememberAnswer));
   document.querySelector('#question-back').addEventListener('click', () => {
     rememberAnswer();
-    if (wizard.questionIndex > 0) wizard.questionIndex -= 1;
-    else wizard.step = 4;
-    renderAuditWizardScreen();
+    if (wizard.contentPage > 0) wizard.contentPage -= 1;
+    else if (wizard.questionIndex > 0) wizard.questionIndex -= 1;
+    else wizard.step = sharedApi ? 3 : 4;
+    Promise.resolve(renderAuditWizardScreen()).then(() => { if (wizard.step === (sharedApi ? 4 : 5)) restorePagerFocus('#question-back', '#question-next'); });
   });
   document.querySelector('#question-next').addEventListener('click', async (event) => {
     const button = event.currentTarget;
     button.classList.add('is-loading');
+    button.disabled = true;
     const nextAnswers = { ...(wizard.draft.answers || {}) };
     const nextAnswer = readPromptAnswer(prompt);
+    if (wizard.contentPage < pageCount - 1) {
+      rememberAnswer(); wizard.contentPage += 1; Promise.resolve(renderAuditWizardScreen()).then(() => restorePagerFocus('#question-next', '#question-back')); return;
+    }
     if (sharedApi && !prompt.optional && nextAnswer === null) {
       const errorBox = document.querySelector('#question-error');
-      errorBox.textContent = 'Please answer this question before continuing.';
-      errorBox.hidden = false;
+      showBoundedError(errorBox, 'Please answer this question before continuing.');
       button.classList.remove('is-loading');
+      button.disabled = false;
       return;
     }
     if (nextAnswer === null || (Array.isArray(nextAnswer) && !nextAnswer.length)) delete nextAnswers[prompt.id];
@@ -1768,13 +2292,14 @@ async function renderQuestionStep() {
     try {
       await persistAuditDraft({ answers: nextAnswers });
       if (wizard.questionIndex < prompts.length - 1) wizard.questionIndex += 1;
-      else wizard.step = 6;
+      else wizard.step = sharedApi ? 5 : 6;
       renderAuditWizardScreen();
     } catch (error) {
       const errorBox = document.querySelector('#question-error');
-      errorBox.textContent = error.message;
-      errorBox.hidden = false;
+      if (sharedApi) showBoundedError(errorBox, error.message);
+      else { errorBox.textContent = error.message; errorBox.hidden = false; }
       button.classList.remove('is-loading');
+      button.disabled = false;
     }
   });
   pageReady();
@@ -1790,6 +2315,7 @@ function answerDisplay(prompt, answer) {
 async function renderAuditReviewStep() {
   const wizard = state.auditWizard;
   if (!wizard.worksheets) await ensureWorksheets();
+  if (sharedApi) return renderSharedAuditReviewStep();
   const worksheet = selectedWorksheet();
   const prompts = worksheet?.prompts || [];
   appRoot.innerHTML = auditWizardFrame({
@@ -1832,6 +2358,139 @@ async function renderAuditReviewStep() {
   pageReady();
 }
 
+async function normalizePhoto(file) {
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) throw new Error('Choose a JPEG, PNG, or WebP image.');
+  let bitmap;
+  try { bitmap = await createImageBitmap(file); } catch { throw new Error('This image could not be decoded. Choose another photo.'); }
+  try {
+    let scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale)); canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const context = canvas.getContext('2d'); if (!context) throw new Error('This browser could not prepare the photo.');
+      context.fillStyle = '#fff'; context.fillRect(0, 0, canvas.width, canvas.height); context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85 - attempt * 0.12));
+      if (blob && blob.size <= 2097152) return blob;
+      scale *= 0.8;
+    }
+    throw new Error('This photo is too large after resizing. Choose a smaller image.');
+  } finally { bitmap.close?.(); }
+}
+
+function mergePhotoDraft(wizard, before, draft) {
+  const newer = newerDraftFields(wizard.draft, before);
+  wizard.draft = { ...draft, ...newer };
+  writeAuditCache();
+}
+
+function ensurePhotoSlots(wizard) {
+  if (wizard.photoSlots) return;
+  wizard.photoSlots = new Map();
+  for (const photo of wizard.draft.photos || []) {
+    const publicPhoto = photo.path?.includes('/audits/');
+    const item = { descriptor: photo, status: publicPhoto ? 'ready' : 'loading', url: publicPhoto ? new URL(photo.path, state.config.apiOrigin).href : null };
+    wizard.photoSlots.set(photo.slot, item);
+    if (!publicPhoto) sharedApi.privatePhoto(wizard.draft.id, photo.slot).then(url => {
+      if (state.auditWizard !== wizard || wizard.photoSlots.get(photo.slot) !== item) { sharedApi.revokePhoto(url); return; }
+      item.url = url; item.privateUrl = true; item.status = 'ready';
+      if (wizard.step === 5) renderAuditWizardScreen();
+    }).catch(error => {
+      if (state.auditWizard !== wizard || wizard.photoSlots.get(photo.slot) !== item) return;
+      item.status = 'preview-error'; item.message = error.message;
+      if (wizard.step === 5) renderAuditWizardScreen();
+    });
+  }
+}
+
+async function uploadPhotoSlot(wizard, slot, file) {
+  const previous = wizard.photoSlots.get(slot);
+  if (previous?.url?.startsWith('blob:')) previous.privateUrl ? sharedApi.revokePhoto(previous.url) : URL.revokeObjectURL(previous.url);
+  const item = { status: 'uploading', file, descriptor: previous?.descriptor || null, controller: new AbortController() };
+  wizard.photoSlots.set(slot, item);
+  renderAuditWizardScreen();
+  try {
+    const blob = await normalizePhoto(file);
+    if (state.auditWizard !== wizard || wizard.photoSlots.get(slot) !== item || item.cancelRequested) return;
+    item.url = URL.createObjectURL(blob);
+    const before = structuredClone(wizard.draft);
+    const result = await sharedApi.putPhoto(wizard.draft.id, slot, blob, item.controller.signal);
+    if (state.auditWizard !== wizard || wizard.photoSlots.get(slot) !== item || item.cancelRequested) return;
+    mergePhotoDraft(wizard, before, result.draft);
+    item.descriptor = result.draft.photos.find(photo => photo.slot === slot); item.status = 'ready';
+  } catch (error) { if (state.auditWizard === wizard && wizard.photoSlots.get(slot) === item && !item.cancelRequested) { item.status = 'failed'; item.message = error.message; } }
+  if (state.auditWizard === wizard && wizard.step === 5 && !item.cancelRequested) renderAuditWizardScreen();
+}
+
+async function removePhotoSlot(wizard, slot) {
+  const item = wizard.photoSlots.get(slot); if (!item) return;
+  if (item.status === 'removing') return;
+  const wasUploading = item.status === 'uploading';
+  if (wasUploading) { item.cancelRequested = true; item.controller?.abort(); }
+  const reconcile = wasUploading || (item.status === 'failed' && Boolean(item.file));
+  if (item.descriptor || reconcile) {
+    item.status = 'removing'; renderAuditWizardScreen();
+    try {
+      if (reconcile) {
+        const before = structuredClone(wizard.draft), refreshed = await sharedApi.refreshDraft(wizard.draft.id);
+        if (state.auditWizard !== wizard || wizard.photoSlots.get(slot) !== item) return;
+        mergePhotoDraft(wizard, before, refreshed.draft);
+        item.descriptor = refreshed.draft.photos.find(photo => photo.slot === slot) || null;
+      }
+      if (item.descriptor || reconcile) {
+        const before = structuredClone(wizard.draft), result = await sharedApi.deletePhoto(wizard.draft.id, slot);
+        if (state.auditWizard !== wizard || wizard.photoSlots.get(slot) !== item) return;
+        mergePhotoDraft(wizard, before, result.draft);
+      }
+    } catch (error) { item.status = 'failed'; item.message = error.message; renderAuditWizardScreen(); return; }
+  }
+  if (item.url?.startsWith('blob:')) item.privateUrl ? sharedApi.revokePhoto(item.url) : URL.revokeObjectURL(item.url);
+  wizard.photoSlots.delete(slot);
+  if (state.auditWizard === wizard && wizard.step === 5) renderAuditWizardScreen();
+}
+
+function renderSharedAuditReviewStep() {
+  const wizard = state.auditWizard, worksheet = selectedWorksheet(), prompts = worksheet?.prompts || [];
+  ensurePhotoSlots(wizard);
+  const zoomed = document.body.classList.contains('text-zoomed');
+  const section = wizard.reviewSection || 'details';
+  const showDetails = !zoomed || section === 'details';
+  const showEdits = !zoomed || section === 'edits';
+  const showPhotos = !zoomed || wizard.reviewSection === 'photos';
+  const scale = Math.max(1, parseFloat(getComputedStyle(document.documentElement).fontSize) / 16);
+  const reviewLimit = scale > 1.25 ? Math.max(20, Math.floor(60 / scale)) : 80;
+  const pages = [
+    ...splitDisplayText(`Location: ${wizard.draft.locationDescription || 'Not provided'}`, reviewLimit),
+    ...prompts.flatMap(prompt => splitDisplayText(`${prompt.label} — ${answerDisplay(prompt, wizard.draft.answers?.[prompt.id])}`, reviewLimit))
+  ];
+  wizard.reviewPage = Math.max(0, Math.min(wizard.reviewPage || 0, pages.length - 1));
+  appRoot.innerHTML = auditWizardFrame({ step: 5, title: 'Review your walk audit', content: `
+    <div class="review-compact"><p><strong>${escapeHtml(studyTypeNames[wizard.draft.type])}</strong></p>
+      ${showDetails ? `<div class="review-page"><p>${escapeHtml(pages[wizard.reviewPage])}</p><p class="help">Detail ${wizard.reviewPage + 1} of ${pages.length}</p></div>
+      <div class="review-page-controls"><button class="button is-light" id="review-prev-detail" type="button" ${wizard.reviewPage ? '' : 'disabled'}>Previous detail</button><button class="button is-light" id="review-next-detail" type="button" ${wizard.reviewPage < pages.length - 1 ? '' : 'disabled'}>Next detail</button></div>` : ''}
+      ${showEdits ? `<div class="review-edit-controls">${wizard.editingAuditId ? '' : '<button class="button is-light" data-edit-step="1" type="button">Change type</button>'}<button class="button is-light" data-edit-step="2" type="button">Edit location</button><button class="button is-light" data-edit-step="3" type="button">Edit description</button><button class="button is-light" data-edit-step="4" type="button">Edit answers</button></div>` : ''}
+      ${showPhotos ? `<div class="photo-heading"><strong>Photos</strong> <span class="help">Optional · up to three</span></div>
+      <div class="photo-slots">${[1, 2, 3].map(slot => {
+        const photo = wizard.photoSlots.get(slot);
+        return `<div class="photo-slot">${photo?.url ? `<img src="${escapeHtml(photo.url)}" alt="Photo ${slot} preview">` : `<span class="photo-placeholder">${photo ? escapeHtml(photo.status === 'uploading' ? 'Uploading…' : photo.status === 'loading' ? 'Loading…' : photo.status === 'removing' ? 'Removing…' : 'Photo unavailable') : `Photo ${slot}`}</span>`}
+          ${wizard.editingAuditId ? '' : photo ? `<div class="photo-slot-actions">${photo.status === 'failed' && photo.file ? `<button class="button is-light" data-retry-photo="${slot}" type="button">Retry</button>` : ''}<button class="button is-light" data-remove-photo="${slot}" type="button" ${photo.status === 'removing' ? 'disabled' : ''}>Remove</button></div>` : `<label class="button is-light photo-add">Add<input type="file" data-photo-slot="${slot}" accept="image/jpeg,image/png,image/webp" hidden></label>`}
+          ${photo?.message ? '<span class="photo-error">Photo needs attention</span>' : ''}</div>`;
+      }).join('')}</div>` : ''}
+      ${zoomed ? `<div class="review-section-controls">${section !== 'details' ? '<button class="button is-light" data-review-section="details" type="button">Details</button>' : ''}${section !== 'edits' ? '<button class="button is-light" data-review-section="edits" type="button">Edit sections</button>' : ''}${section !== 'photos' ? '<button class="button is-light" data-review-section="photos" type="button">Photos</button>' : ''}</div>` : ''}</div>
+    <div id="review-error" class="error-notice" hidden></div><div class="wizard-actions"><button class="button is-light" id="review-back" type="button">Back</button><button class="button is-primary" id="submit-final-audit" type="button">${wizard.editingAuditId ? 'Save audit' : 'Submit audit'}</button></div>` });
+  document.querySelectorAll('[data-edit-step]').forEach(button => button.addEventListener('click', () => { wizard.step = Number(button.dataset.editStep); if (wizard.step === 4) { wizard.questionIndex = 0; wizard.contentKey = null; } renderAuditWizardScreen(); }));
+  document.querySelector('#review-prev-detail')?.addEventListener('click', () => { wizard.reviewPage--; Promise.resolve(renderAuditWizardScreen()).then(() => restorePagerFocus('#review-prev-detail', '#review-next-detail')); });
+  document.querySelector('#review-next-detail')?.addEventListener('click', () => { wizard.reviewPage++; Promise.resolve(renderAuditWizardScreen()).then(() => restorePagerFocus('#review-next-detail', '#review-prev-detail')); });
+  document.querySelectorAll('[data-review-section]').forEach(button => button.addEventListener('click', () => { wizard.reviewSection = button.dataset.reviewSection; Promise.resolve(renderAuditWizardScreen()).then(() => restorePagerFocus(`[data-review-section="${section}"]`, '#submit-final-audit')); }));
+  document.querySelector('#review-back').addEventListener('click', () => { wizard.step = 4; wizard.questionIndex = Math.max(prompts.length - 1, 0); wizard.contentKey = null; renderAuditWizardScreen(); });
+  document.querySelector('#submit-final-audit').addEventListener('click', submitAuditWizard);
+  document.querySelectorAll('[data-photo-slot]').forEach(input => input.addEventListener('change', () => { if (input.files?.[0]) uploadPhotoSlot(wizard, Number(input.dataset.photoSlot), input.files[0]); }));
+  document.querySelectorAll('[data-remove-photo]').forEach(button => button.addEventListener('click', () => removePhotoSlot(wizard, Number(button.dataset.removePhoto))));
+  document.querySelectorAll('[data-retry-photo]').forEach(button => button.addEventListener('click', () => { const slot = Number(button.dataset.retryPhoto), item = wizard.photoSlots.get(slot); if (item?.file) uploadPhotoSlot(wizard, slot, item.file); }));
+  const photoIssue = [...wizard.photoSlots.values()].find(photo => photo.message);
+  if (photoIssue) showBoundedError(document.querySelector('#review-error'), photoIssue.message);
+  pageReady();
+}
+
 function reviewCard(label, value, editStep) {
   return `<article class="review-card">
     <div class="review-card-header"><span class="review-label">${escapeHtml(label)}</span><button class="edit-link" type="button" data-edit-step="${editStep}">Edit</button></div>
@@ -1846,15 +2505,18 @@ async function submitAuditWizard(event) {
   button.classList.add('is-loading');
   errorBox.hidden = true;
   if (sharedApi) {
+    if ([...(wizard.photoSlots?.values() || [])].some(photo => ['uploading', 'removing', 'failed'].includes(photo.status))) {
+      showBoundedError(errorBox, 'Wait for photo uploads to finish, or retry or remove failed photos.'); button.classList.remove('is-loading'); return;
+    }
     button.disabled = true;
     try {
+      await persistAuditDraft({ answers: structuredClone(wizard.draft.answers || {}) });
       await api(`/api/drafts/${wizard.draft.id}/submit`, { method: 'POST', body: {} });
       privateDraftCache.delete(wizard.cacheKey);
-      state.auditWizard = null;
+      clearAuditWizard();
       navigate(`/studies/${wizard.studyId}?${wizard.editingAuditId ? 'saved' : 'submitted'}=1`, { replace: true });
     } catch (error) {
-      errorBox.textContent = error.message;
-      errorBox.hidden = false;
+      showBoundedError(errorBox, error.message);
       button.classList.remove('is-loading');
       button.disabled = false;
     }
@@ -1918,7 +2580,7 @@ async function renderAuditDetail(studyId, auditId, token) {
         <div id="audit-detail-map" class="map-canvas" role="region" aria-label="Map of the audited location"></div>
       </div>
       <div class="detail-grid">
-        <div class="detail-item"><span class="detail-item-label">Type</span><strong>${audit.type === 'intersection' ? 'Intersection' : 'Street segment'}</strong></div>
+        <div class="detail-item"><span class="detail-item-label">Type</span><strong>${escapeHtml(studyTypeNames[audit.type] || audit.type)}</strong></div>
         <div class="detail-item"><span class="detail-item-label">Submitted</span><strong>${escapeHtml(formatDateTime(audit.createdOn))}</strong></div>
         <div class="detail-item"><span class="detail-item-label">Contributor</span><strong>${escapeHtml(audit.contributorName)}</strong></div>
         <div class="detail-item"><span class="detail-item-label">Worksheet</span><strong>${escapeHtml(audit.worksheetTitle)}</strong></div>
@@ -1934,6 +2596,7 @@ async function renderAuditDetail(studyId, auditId, token) {
         </div>`).join('')}
       </dl>
     </div>
+    ${audit.photos?.length ? `<div class="panel-card mt-4"><h2 class="title is-4">Photos</h2><div class="audit-photo-gallery">${audit.photos.map(photo => `<a href="${escapeHtml(photo.url)}" target="_blank" rel="noopener"><img src="${escapeHtml(photo.url)}" alt="Audit photo ${photo.slot}"></a>`).join('')}</div></div>` : ''}
 
     <div class="button-row mt-5">
       <button class="button is-light" id="back-to-study" type="button">Back to study</button>

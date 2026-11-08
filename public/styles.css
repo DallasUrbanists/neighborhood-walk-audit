@@ -1360,3 +1360,176 @@ a {
     border-width: 3px;
   }
 }
+
+/* Study-owned question authoring keeps ordinary page scrolling. */
+.dashboard-group { margin-top: 2rem; }
+.question-editor-list { display: grid; gap: 1rem; }
+.question-editor-card { padding: 1rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.question-editor-heading { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.75rem; }
+.question-options { margin-top: 1rem; }
+.question-option, .question-add-row { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
+.question-option .input, .question-add-row .select { flex: 1; min-width: 0; }
+.question-required { display: block; margin: 1rem 0; }
+.audit-photo-gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
+.audit-photo-gallery img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 0.5rem; }
+#login-zoom-email, .login-zoom-navigation { display: none; }
+
+/* Full viewport maps sit behind their controls, without a reserved header band. */
+html.is-map-viewport { min-width: 0; overflow: hidden; }
+body.is-map-viewport { height: min(var(--walk-viewport-height, 100dvh), 100dvh); overflow: hidden; overscroll-behavior: none; }
+body.is-map-viewport .app-header, body.is-map-viewport .offline-banner { display: none; }
+body.is-map-viewport #app { position: fixed; inset: 0; width: 100%; height: min(var(--walk-viewport-height, 100dvh), 100dvh); min-height: 0; padding: 0; overflow: hidden; }
+body.is-map-viewport .wizard-shell.is-map-step { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; overflow: hidden; }
+body.is-map-viewport .map-shell { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+body.is-map-viewport .wizard-topline { position: absolute; z-index: 800; top: max(0.4rem, env(safe-area-inset-top)); left: max(0.6rem, env(safe-area-inset-left)); right: max(0.6rem, env(safe-area-inset-right)); height: 2rem; margin: 0; padding: 0.35rem 0.65rem; overflow: hidden; border-radius: 0.6rem; background: var(--surface); }
+body.is-map-viewport .wizard-topline .eyebrow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.is-map-viewport .wizard-topline .step-label { flex: none; white-space: nowrap; }
+body.is-map-viewport .wizard-question { position: absolute; z-index: 800; top: calc(2.6rem + env(safe-area-inset-top)); left: max(0.6rem, env(safe-area-inset-left)); max-width: calc(100% - 1.2rem); margin: 0; padding: 0.4rem 0.65rem; border-radius: 0.6rem; background: var(--surface); font-size: 1.25rem; line-height: 1.15; }
+body.is-map-viewport .wizard-shell > .progress-track, body.is-map-viewport .wizard-shell > .wizard-help { display: none; }
+body.is-map-viewport .map-instruction { top: calc(6rem + env(safe-area-inset-top)); left: max(0.6rem, env(safe-area-inset-left)); }
+body.is-map-viewport .map-overlay-controls { top: calc(6rem + env(safe-area-inset-top)); right: max(0.6rem, env(safe-area-inset-right)); }
+body.is-map-viewport .map-action-tray { position: absolute; z-index: 800; right: max(0.6rem, env(safe-area-inset-right)); bottom: max(0.6rem, env(safe-area-inset-bottom)); left: max(0.6rem, env(safe-area-inset-left)); display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.35rem; margin: 0; }
+body.is-map-viewport .map-action-tray .button { grid-column: span 2; min-width: 0; }
+body.is-map-viewport .map-action-tray .button.is-link, body.is-map-viewport .map-action-tray .button.is-primary { grid-column: span 3; }
+body.is-map-viewport .wizard-actions { position: absolute; z-index: 800; right: max(0.6rem, env(safe-area-inset-right)); bottom: max(0.6rem, env(safe-area-inset-bottom)); left: max(0.6rem, env(safe-area-inset-left)); margin: 0; padding: 0; background: none; }
+body.is-map-viewport .wizard-actions .button { min-width: 0; }
+body.is-map-viewport .location-readout { position: absolute; z-index: 800; right: max(0.6rem, env(safe-area-inset-right)); bottom: calc(4.5rem + env(safe-area-inset-bottom)); left: max(0.6rem, env(safe-area-inset-left)); margin: 0; padding: 0.55rem 0.7rem; border-radius: 0.7rem; background: var(--surface); }
+body.is-map-viewport .route-readout { display: block; }
+body.is-map-viewport .route-readout .help { margin: 0.1rem 0; }
+body.is-map-viewport .route-controls { display: flex; gap: 0.35rem; margin-top: 0.25rem; }
+body.is-map-viewport .route-controls .button { flex: 1; min-width: 0; padding-inline: 0.3rem; font-size: 0.8rem; }
+body.is-map-viewport #audit-location-error, body.is-map-viewport #boundary-error { position: absolute; z-index: 900; top: calc(10rem + env(safe-area-inset-top)); left: 0.6rem; right: 0.6rem; margin: 0; }
+body.is-map-viewport .leaflet-bottom.leaflet-right { bottom: calc(11rem + env(safe-area-inset-bottom)); }
+body.is-map-viewport .audit-map-shell .leaflet-bottom.leaflet-right { bottom: calc(14.5rem + env(safe-area-inset-bottom)); }
+body.is-map-viewport .leaflet-control-zoom a { width: 52px !important; height: 52px !important; line-height: 52px !important; }
+.route-pin { display: grid; width: 36px; height: 36px; place-items: center; border: 3px solid #fff; border-radius: 50%; background: #d3263e; color: #fff; font-weight: 900; box-shadow: 0 1px 7px #0008; }
+body.is-map-viewport.text-zoomed { --tap: 52px; }
+body.is-map-viewport.text-zoomed .wizard-topline { top: max(6px, env(safe-area-inset-top)); height: 40px; padding: 4px 10px; }
+body.is-map-viewport.text-zoomed .wizard-question { top: calc(50px + env(safe-area-inset-top)); padding: 4px 10px; font-size: 1rem; }
+body.is-map-viewport.text-zoomed .map-instruction, body.is-map-viewport.text-zoomed .map-overlay-controls { top: calc(110px + env(safe-area-inset-top)); }
+body.is-map-viewport.text-zoomed .map-control-button { width: 52px; height: 52px; }
+body.is-map-viewport.text-zoomed .location-readout { bottom: calc(68px + env(safe-area-inset-bottom)); padding: 6px 10px; font-size: 0.75rem; }
+body.is-map-viewport.text-zoomed .route-controls .button, body.is-map-viewport.text-zoomed .wizard-actions .button, body.is-map-viewport.text-zoomed .map-action-tray .button { min-height: 52px; height: auto; padding: 4px; font-size: 0.7rem; line-height: 1.1; white-space: normal; overflow-wrap: anywhere; }
+body.is-map-viewport.text-zoomed .wizard-actions, body.is-map-viewport.text-zoomed .map-action-tray { bottom: max(8px, env(safe-area-inset-bottom)); }
+body.is-map-viewport.text-zoomed .leaflet-bottom.leaflet-right { bottom: calc(176px + env(safe-area-inset-bottom)); }
+body.is-map-viewport.text-zoomed .audit-map-shell .leaflet-bottom.leaflet-right { bottom: calc(230px + env(safe-area-inset-bottom)); }
+
+@media (max-width: 640px) {
+  html.is-compact-viewport { min-width: 0; overflow: hidden; }
+  html.is-compact-viewport.viewport-constrained { overflow: auto; }
+  body.is-compact-viewport:not(.viewport-constrained) { height: min(var(--walk-viewport-height, 100dvh), 100dvh); overflow: hidden; overscroll-behavior: none; }
+  body.is-compact-viewport:not(.viewport-constrained) #app { height: calc(min(var(--walk-viewport-height, 100dvh), 100dvh) - var(--header-height)); min-height: 0; padding: 0.5rem max(0.7rem, env(safe-area-inset-left)) max(0.5rem, env(safe-area-inset-bottom)); overflow: hidden; }
+  body.is-compact-viewport:not(.viewport-constrained) .wizard-shell { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; }
+  body.is-compact-viewport .wizard-topline { flex: none; margin-bottom: 0.35rem; }
+  body.is-compact-viewport .wizard-topline .eyebrow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  body.is-compact-viewport .wizard-topline .step-label { flex: none; white-space: nowrap; }
+  body.is-compact-viewport .progress-track { flex: none; height: 0.45rem; margin-bottom: 0.55rem; }
+  body.is-compact-viewport .wizard-question { flex: none; margin-bottom: 0.55rem; font-size: 1.35rem; line-height: 1.16; }
+  body.is-compact-viewport .wizard-question, body.is-compact-viewport .option-row span, body.is-compact-viewport .review-page { min-width: 0; overflow-wrap: anywhere; }
+  body.is-compact-viewport .wizard-help { margin: 0 0 0.5rem; font-size: 0.9rem; }
+  body.is-compact-viewport .wizard-actions { position: static; flex: none; margin: auto 0 0; padding: 0.4rem 0 0; background: none; }
+  body.is-compact-viewport .option-list { gap: 0.35rem; }
+  body.is-compact-viewport .option-row { min-height: 52px; padding: 0.45rem 0.6rem; }
+  body.is-compact-viewport .choice-title { font-size: 1rem; }
+  body.is-compact-viewport .choice-description { font-size: 0.8rem; }
+  body.is-compact-viewport .compact-question .textarea { min-height: 6rem; height: 8rem; }
+  body.is-compact-viewport .compact-question .help { margin-top: 0.35rem !important; }
+  body.is-compact-viewport .login-shell { display: block; min-height: 0; height: 100%; }
+  body.is-compact-viewport .login-panel { height: 100%; padding: 0.8rem; border: 0; box-shadow: none; }
+  body.is-compact-viewport .login-panel .title { margin-bottom: 0.35rem; font-size: 1.55rem; }
+  body.is-compact-viewport .login-panel .subtitle { margin-bottom: 0.6rem; font-size: 0.95rem; }
+  body.is-compact-viewport .login-panel .field { margin-bottom: 0.5rem; }
+  body.is-compact-viewport .login-panel .label { margin-bottom: 0.2rem; }
+  body.is-compact-viewport .login-panel .mb-5, body.is-compact-viewport .login-panel .mb-4 { margin-bottom: 0.55rem !important; }
+  body.is-compact-viewport .login-panel .mt-3, body.is-compact-viewport .login-panel .mt-4 { margin-top: 0.35rem !important; }
+  .login-help { margin-top: 0.3rem; font-size: 0.8rem; }
+  .review-compact { min-height: 0; }
+  .review-compact .edit-link { min-height: 52px; }
+  .review-compact p { margin-bottom: 0.2rem; }
+  .review-page { min-height: 4.5rem; padding: 0.4rem 0.55rem; border: 1px solid var(--line); border-radius: 0.55rem; }
+  .review-page-controls, .review-edit-controls { display: flex; gap: 0.3rem; margin-top: 0.3rem; }
+  .worksheet-page-controls, .type-page-controls { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.4rem; }
+  .worksheet-page-controls .button, .type-page-controls .button { flex: 1; min-width: 0; white-space: normal; }
+  .review-page-controls .button, .review-edit-controls .button { flex: 1; min-width: 0; padding-inline: 0.25rem; white-space: normal; font-size: 0.75rem; }
+  .photo-heading { display: flex; align-items: baseline; gap: 0.5rem; margin: 0.35rem 0 0.15rem; }
+  .photo-slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.35rem; }
+  .photo-slot { min-width: 0; text-align: center; }
+  .photo-slot img, .photo-placeholder { display: block; width: 100%; height: 3.5rem; object-fit: cover; border: 1px solid var(--line); border-radius: 0.4rem; }
+  .photo-placeholder { display: grid; place-items: center; font-size: 0.75rem; }
+  .photo-slot-actions { display: flex; }
+  .photo-slot .button { flex: 1; width: 100%; min-width: 0; padding-inline: 0.15rem; font-size: 0.75rem; }
+  .photo-error { display: block; font-size: 0.7rem; line-height: 1.1; overflow-wrap: anywhere; }
+  body.is-compact-viewport .error-notice:not([hidden]) { position: fixed; z-index: 1200; top: 30%; left: 0.7rem; right: 0.7rem; margin: 0 !important; padding: 0.7rem; box-shadow: 0 4px 20px #0005; }
+  body.is-compact-viewport .error-notice { overflow-wrap: anywhere; }
+  .error-page-actions { display: flex; gap: 0.4rem; margin-top: 0.4rem; }
+  .error-page-actions .button { flex: 1; min-width: 0; }
+  body.viewport-constrained.is-compact-viewport { overflow: auto; }
+  html.is-compact-viewport.text-zoomed:not(.keyboard-constrained) { overflow: hidden; }
+  body.is-compact-viewport.text-zoomed:not(.keyboard-constrained) { --tap: 52px; --header-height: 68px; height: min(var(--walk-viewport-height, 100dvh), 100dvh); overflow: hidden; }
+  body.is-compact-viewport.text-zoomed:not(.keyboard-constrained) .app-header { height: 68px; }
+  body.is-compact-viewport.text-zoomed:not(.keyboard-constrained) #app { height: calc(min(var(--walk-viewport-height, 100dvh), 100dvh) - 68px); min-height: 0; padding: 0.4rem 0.7rem; overflow: hidden; }
+  body.is-compact-viewport.text-zoomed:not(.keyboard-constrained) .wizard-shell { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; }
+  body.is-compact-viewport.text-zoomed .wizard-question { font-size: 1rem; }
+  body.is-compact-viewport.text-zoomed .wizard-help, body.is-compact-viewport.text-zoomed .help { font-size: 0.7rem; }
+  body.is-compact-viewport.text-zoomed .button { height: auto; min-height: 52px; font-size: 0.75rem; line-height: 1.1; overflow-wrap: anywhere; }
+  body.is-compact-viewport.text-zoomed .app-header { padding-inline: 8px; }
+  body.is-compact-viewport.text-zoomed .brand-copy strong { font-size: 0.65rem; }
+  body.is-compact-viewport.text-zoomed .header-actions { gap: 4px; }
+  body.is-compact-viewport.text-zoomed .wizard-actions { gap: 8px; }
+  body.is-compact-viewport.text-zoomed .wizard-actions .button { flex: 1 1 0; min-width: 0; padding: 4px; white-space: normal; }
+  body.is-compact-viewport.text-zoomed .type-page-controls .button,
+  body.is-compact-viewport.text-zoomed .review-page-controls .button,
+  body.is-compact-viewport.text-zoomed .review-edit-controls .button { padding: 4px; font-size: 0.6rem; }
+  body.is-compact-viewport.text-zoomed .review-page-controls,
+  body.is-compact-viewport.text-zoomed .review-edit-controls { gap: 4px; }
+  body.is-compact-viewport.text-zoomed .review-section-controls { display: flex; gap: 4px; margin-top: 0.35rem; }
+  body.is-compact-viewport.text-zoomed .review-section-controls .button { flex: 1; min-width: 0; padding: 4px; font-size: 0.6rem; white-space: normal; }
+  html.is-login-screen.viewport-constrained { overflow: hidden; }
+  body.is-login-screen.viewport-constrained.is-compact-viewport { --tap: 52px; --header-height: 68px; height: min(var(--walk-viewport-height, 100dvh), 100dvh); overflow: hidden; }
+  body.is-login-screen.viewport-constrained .app-header { height: 68px; }
+  body.is-login-screen.viewport-constrained #app { height: calc(min(var(--walk-viewport-height, 100dvh), 100dvh) - 68px); min-height: 0; padding: 0.4rem 0.7rem; overflow: hidden; }
+  body.is-login-screen.viewport-constrained .login-shell { height: 100%; min-height: 0; }
+  body.is-login-screen.viewport-constrained .login-panel { height: 100%; padding: 0.4rem; }
+  body.is-login-screen.viewport-constrained .login-panel .title { margin-bottom: 0.4rem; font-size: 1rem; }
+  body.is-login-screen.viewport-constrained .login-panel .subtitle { display: none; }
+  body.is-login-screen.viewport-constrained .login-panel .button { white-space: normal; line-height: 1.15; }
+  body.is-login-screen.viewport-constrained .login-help summary { min-height: 52px; }
+  body.is-login-screen.viewport-constrained [data-login-stage="choice"] #login-zoom-email { display: inline-flex; }
+  body.is-login-screen.viewport-constrained [data-login-stage="choice"] #firebase-login-form,
+  body.is-login-screen.viewport-constrained [data-login-stage="choice"] #reset-password { display: none; }
+  body.is-login-screen.viewport-constrained [data-login-stage="email"] #google-sign-in,
+  body.is-login-screen.viewport-constrained [data-login-stage="email"] #login-password-field,
+  body.is-login-screen.viewport-constrained [data-login-stage="email"] #login-create-field,
+  body.is-login-screen.viewport-constrained [data-login-stage="email"] #login-email-submit,
+  body.is-login-screen.viewport-constrained [data-login-stage="email"] .login-help { display: none; }
+  body.is-login-screen.viewport-constrained [data-login-stage="password"] #google-sign-in,
+  body.is-login-screen.viewport-constrained [data-login-stage="password"] #login-email-field,
+  body.is-login-screen.viewport-constrained [data-login-stage="password"] #reset-password,
+  body.is-login-screen.viewport-constrained [data-login-stage="password"] .login-help,
+  body.is-login-screen.viewport-constrained [data-login-stage="password"] #login-zoom-next { display: none; }
+  body.is-login-screen.viewport-constrained [data-login-stage="email"] .login-zoom-navigation,
+  body.is-login-screen.viewport-constrained [data-login-stage="password"] .login-zoom-navigation { display: flex; gap: 0.4rem; margin-top: 0.4rem; }
+  body.is-login-screen.viewport-constrained .login-zoom-navigation .button { flex: 1; min-width: 0; }
+}
+
+@media (max-width: 640px) and (max-height: 680px) {
+  body.is-compact-viewport .wizard-question { font-size: 1.2rem; }
+  .review-page { min-height: 3.5rem; font-size: 0.9rem; line-height: 1.25; }
+  .photo-slot img, .photo-placeholder { height: 2.5rem; }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  body.is-map-viewport .map-overlay-controls { top: calc(2.6rem + env(safe-area-inset-top)); }
+  body.is-map-viewport .leaflet-bottom.leaflet-right,
+  body.is-map-viewport .audit-map-shell .leaflet-bottom.leaflet-right { bottom: calc(5rem + env(safe-area-inset-bottom)); }
+  body.is-map-viewport .map-action-tray { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  body.is-map-viewport .map-action-tray .button,
+  body.is-map-viewport .map-action-tray .button.is-link,
+  body.is-map-viewport .map-action-tray .button.is-primary { grid-column: auto; }
+  body.is-map-viewport .location-readout { right: auto; width: calc(100% - 260px); max-width: 30rem; }
+  body.is-map-viewport #audit-location-error,
+  body.is-map-viewport #boundary-error { top: calc(5rem + env(safe-area-inset-top)); right: auto; width: calc(100% - 260px); }
+  body.is-map-viewport.text-zoomed .map-overlay-controls { top: calc(50px + env(safe-area-inset-top)); }
+  body.is-map-viewport.text-zoomed .leaflet-bottom.leaflet-right,
+  body.is-map-viewport.text-zoomed .audit-map-shell .leaflet-bottom.leaflet-right { bottom: calc(80px + env(safe-area-inset-bottom)); }
+}
