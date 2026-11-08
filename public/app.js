@@ -3,6 +3,7 @@
 
 import { createSharedApi, reconstructAuditGeometry } from './shared-api.js';
 import { initializeFirebaseAuth } from './firebase-auth.js';
+import { enableMapPlacement } from './map-placement.js';
 import { createQuestionnaireState, setTypeEnabled, addBankQuestion, addCustomQuestion, updateQuestion, removeQuestion, moveQuestion, serializeQuestionnaires, validateQuestionnaire } from './questionnaires.js';
 
 let sharedApi = null;
@@ -961,7 +962,7 @@ function renderStudyQuestionnaires() {
   pageReady();
 }
 
-function locateMap(map, onSuccess) {
+function locateMap(map, onSuccess, shouldApply = () => true) {
   if (!navigator.geolocation) {
     showToast('Location services are not available in this browser.', 'error');
     return;
@@ -971,7 +972,7 @@ function locateMap(map, onSuccess) {
   navigator.geolocation.getCurrentPosition(
     (position) => {
       button?.classList?.remove('is-loading');
-      if (!state.activeMaps.includes(map)) return;
+      if (!state.activeMaps.includes(map) || !shouldApply()) return;
       const latlng = [position.coords.latitude, position.coords.longitude];
       map.setView(latlng, Math.max(map.getZoom(), 17));
       onSuccess?.(position);
@@ -1681,7 +1682,7 @@ function renderAuditLocationStep() {
   appRoot.innerHTML = auditWizardFrame({
     step: 2,
     title: `Pin the ${typeLabel}`,
-    help: 'We’ll start with your phone’s location. Drag the map pin if needed; the closest mapped location will highlight in red.',
+    help: 'We’ll start with your phone’s location. Tap the map or drag the pin to choose a location; the closest mapped location will highlight in red.',
     mapStep: true,
     content: `<div class="map-shell audit-map-shell">
       <div id="audit-location-map" class="map-canvas" role="region" aria-label="Map for selecting the audit location"></div>
@@ -1691,7 +1692,7 @@ function renderAuditLocationStep() {
     </div>
     <div class="location-readout" aria-live="polite">
       <span class="location-dot" aria-hidden="true"></span>
-      <div><strong id="snapped-description">Finding the nearest ${typeLabel}…</strong><p class="help" id="snapped-distance"></p></div>
+      <div><strong id="snapped-description">Finding the nearest ${typeLabel}…</strong><p class="help" id="snapped-distance"></p><p class="help">Tap the map or drag the pin to move it.</p></div>
     </div>
     <div id="audit-location-error" class="error-notice mt-3" hidden></div>
     <div class="wizard-actions">
@@ -1699,13 +1700,14 @@ function renderAuditLocationStep() {
       <button class="button is-primary" id="location-next" type="button" disabled>Next</button>
     </div>`
   });
-  initializeAuditLocationMap();
+  const placement = initializeAuditLocationMap();
   document.querySelector('#location-back').addEventListener('click', () => {
     if (sharedApi && wizard.editingAuditId) return navigate(`/studies/${wizard.studyId}`);
     wizard.step = 1;
     renderAuditWizardScreen();
   });
   document.querySelector('#location-next').addEventListener('click', async (event) => {
+    placement.flush();
     const button = event.currentTarget;
     button.classList.add('is-loading');
     button.disabled = true;
@@ -1742,7 +1744,8 @@ function initializeAuditLocationMap() {
   wizard.locationSaving = false;
   const map = createMap('audit-location-map', { scrollWheelZoom: true });
   const hadSavedLocation = Boolean(wizard.draft.locationGps);
-  let manuallyMoved = false;
+  let manuallyMoved = false, interactionVersion = 0;
+  const markManual = () => { manuallyMoved = true; interactionVersion++; };
   const center = wizard.draft.locationGps
     ? [wizard.draft.locationGps.latitude, wizard.draft.locationGps.longitude]
     : areaCenter(wizard.study.area);
@@ -1750,7 +1753,7 @@ function initializeAuditLocationMap() {
   const areaLayer = L.geoJSON(wizard.study.area, {
     style: { color: '#9a7700', weight: 3, fillColor: '#f5c842', fillOpacity: 0.16 }
   }).addTo(map);
-  map.on('dragstart zoomstart', () => { manuallyMoved = true; });
+  map.on('dragstart zoomstart', markManual);
 
   const marker = L.marker(center, { draggable: true, keyboard: true, title: 'Audit location pin' }).addTo(map);
   wizard.locationMarker = marker;
@@ -1794,12 +1797,19 @@ function initializeAuditLocationMap() {
     writeAuditCache();
   }
 
-  marker.on('dragstart', () => { manuallyMoved = true; });
+  marker.on('dragstart', markManual);
   marker.on('dragend', (event) => updateSelection(event.target.getLatLng()));
   marker.on('drag', (event) => {
     const latlng = event.target.getLatLng();
     wizard.draft.locationGps = { latitude: latlng.lat, longitude: latlng.lng };
   });
+  const placement = enableMapPlacement(map, marker, {
+    canSelect: () => !wizard.locationSaving,
+    onIntent: markManual,
+    onSelect: latlng => { marker.setLatLng(latlng); updateSelection(latlng); }
+  });
+  const oldCleanup = map._walkAuditCleanup;
+  map._walkAuditCleanup = () => { placement.dispose(); oldCleanup?.(); };
   updateSelection(marker.getLatLng());
 
   function usePosition(position, explicit = false) {
@@ -1815,13 +1825,19 @@ function initializeAuditLocationMap() {
     updateSelection(latlng);
   }
 
-  document.querySelector('#audit-locate').addEventListener('click', () => locateMap(map, position => usePosition(position, true)));
+  document.querySelector('#audit-locate').addEventListener('click', () => {
+    placement.cancel();
+    markManual();
+    const version = interactionVersion;
+    locateMap(map, position => usePosition(position, true), () => !wizard.locationSaving && version === interactionVersion);
+  });
   if (!hadSavedLocation && navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(position => usePosition(position), () => {}, {
       enableHighAccuracy: true, timeout: 10_000, maximumAge: 15_000
     });
   }
   scheduleMapResize(map);
+  return placement;
 }
 
 function renderRouteLocationStep() {
@@ -1831,9 +1847,9 @@ function renderRouteLocationStep() {
     featureId: wizard.draft.featureId, locationGps: structuredClone(wizard.draft.locationGps), geojson: structuredClone(wizard.draft.geojson)
   };
   const keepingLegacy = legacy && !wizard.replaceLegacyRoute;
-  appRoot.innerHTML = auditWizardFrame({ step: 2, title: keepingLegacy ? 'Current street location' : 'Choose a street route', help: 'Start at an intersection, then choose an endpoint on a street.', mapStep: true, content: `
+  appRoot.innerHTML = auditWizardFrame({ step: 2, title: keepingLegacy ? 'Current street location' : 'Choose a street route', help: keepingLegacy ? 'Keep this location, or replace it with a two-pin route.' : 'Tap the map or drag each pin. Start at an intersection, then choose an endpoint on a street.', mapStep: true, content: `
     <div class="map-shell audit-map-shell"><div id="audit-location-map" class="map-canvas" role="region" aria-label="Map for selecting the street route"></div><div class="map-overlay-controls"><button class="map-control-button" id="audit-locate" type="button" aria-label="Use my current location">◎</button></div></div>
-    <div class="location-readout route-readout" aria-live="polite"><div><strong id="route-status">${keepingLegacy ? 'Your existing street location is unchanged.' : 'Choose start A at an intersection.'}</strong><p class="help" id="route-detail">${keepingLegacy ? 'Keep this location, or replace it with a two-pin route.' : ''}</p></div>
+    <div class="location-readout route-readout" aria-live="polite"><div><strong id="route-status">${keepingLegacy ? 'Your existing street location is unchanged.' : 'Choose start A at an intersection.'}</strong><p class="help" id="route-detail">${keepingLegacy ? 'Keep this location, or replace it with a two-pin route.' : ''}</p>${keepingLegacy ? '' : '<p class="help">Tap the map or drag the pin to move it.</p>'}</div>
       ${keepingLegacy ? '' : `<div class="route-controls"><button class="button is-light" id="route-select-a" type="button">Start A</button><button class="button is-light" id="route-select-b" type="button">End B</button><button class="button is-light" id="route-show" type="button">Show route</button></div>`}</div>
     <div id="audit-location-error" class="error-notice" hidden></div>
     <div class="wizard-actions"><button class="button is-light" id="route-back" type="button">${wizard.replaceLegacyRoute ? 'Cancel change' : 'Back'}</button><button class="button is-primary" id="route-next" type="button">${keepingLegacy ? 'Keep location' : 'Confirm start A'}</button>${keepingLegacy ? '<button class="button is-link" id="route-replace" type="button">Replace location</button>' : ''}</div>` });
@@ -1855,14 +1871,15 @@ function renderRouteLocationStep() {
   }
   const saved = wizard.draft.routeSelection;
   const route = wizard.routeState || (wizard.routeState = { startId: saved?.startIntersectionId || null, end: saved?.end || null, phase: saved?.startIntersectionId ? 'end' : 'start', preview: null });
-  let previewTimer, previewSequence = 0, previewController, highlighted, routeLayer, otherMarker, manual = false, saving = false, candidate = null;
+  let previewTimer, previewSequence = 0, previewController, highlighted, routeLayer, otherMarker, manual = false, interactionVersion = 0, saving = false, candidate = null;
+  const markManual = () => { manual = true; interactionVersion++; };
   const initialSaved = Boolean(startPosition);
   const icon = label => L.divIcon({ className: '', html: `<span class="route-pin">${label}</span>`, iconSize: [36, 36], iconAnchor: [18, 18] });
   const marker = L.marker(center, { draggable: true, keyboard: true, icon: icon(route.phase === 'start' ? 'A' : 'B'), title: 'Route endpoint' }).addTo(map);
   const oldCleanup = map._walkAuditCleanup;
   map._walkAuditCleanup = () => { clearTimeout(previewTimer); previewController?.abort(); oldCleanup?.(); };
-  map.on('dragstart zoomstart', () => { manual = true; });
-  marker.on('dragstart', () => { manual = true; });
+  map.on('dragstart zoomstart', markManual);
+  marker.on('dragstart', markManual);
 
   function updateOtherMarker() {
     if (otherMarker) map.removeLayer(otherMarker);
@@ -1922,22 +1939,36 @@ function renderRouteLocationStep() {
     if (route.phase === 'end') {
       route.end = { featureId: match.feature.properties.id, locationGps: { longitude: match.latlng[1], latitude: match.latlng[0] } };
       preview();
-    } else { clearPreview(); document.querySelector('#route-detail').textContent = match.feature.properties.name || 'Drag A to the starting intersection.'; updateControls(); }
+    } else { clearPreview(); document.querySelector('#route-detail').textContent = match.feature.properties.name || 'Tap the map or drag A to the starting intersection.'; updateControls(); }
   }
+  const placement = enableMapPlacement(map, marker, {
+    canSelect: () => !saving,
+    onIntent: markManual,
+    onSelect: select
+  });
+  const cleanupBeforePlacement = map._walkAuditCleanup;
+  map._walkAuditCleanup = () => { placement.dispose(); cleanupBeforePlacement?.(); };
   marker.on('dragend', event => select(event.target.getLatLng()));
   document.querySelector('#route-select-a').addEventListener('click', () => {
+    placement.cancel();
+    markManual();
     route.phase = 'start'; marker.setIcon(icon('A'));
     const start = wizard.study.intersections.features.find(feature => feature.properties.id === route.startId);
     if (start) { marker.setLatLng([start.geometry.coordinates[1], start.geometry.coordinates[0]]); map.setView(marker.getLatLng(), map.getZoom()); }
     select(marker.getLatLng());
   });
   document.querySelector('#route-select-b').addEventListener('click', () => {
+    placement.cancel();
+    markManual();
     route.phase = 'end'; marker.setIcon(icon('B'));
     if (route.end) marker.setLatLng([route.end.locationGps.latitude, route.end.locationGps.longitude]);
     map.setView(marker.getLatLng(), map.getZoom()); select(marker.getLatLng());
   });
-  document.querySelector('#route-show').addEventListener('click', () => { const bounds = routeLayer?.getBounds(); if (bounds?.isValid()) map.fitBounds(bounds, { padding: [50, 50], maxZoom: 19 }); });
+  document.querySelector('#route-show').addEventListener('click', () => { placement.cancel(); markManual(); const bounds = routeLayer?.getBounds(); if (bounds?.isValid()) map.fitBounds(bounds, { padding: [50, 50], maxZoom: 19 }); });
   next.addEventListener('click', async () => {
+    placement.flush();
+    // A newly selected endpoint must finish its route preview before saving.
+    if (next.disabled) return;
     next.disabled = true; errorBox.hidden = true; saving = true;
     marker.dragging.disable(); back.disabled = true;
     document.querySelector('#audit-locate').disabled = true;
@@ -1956,6 +1987,7 @@ function renderRouteLocationStep() {
     } catch (error) { errorBox.textContent = error.message; errorBox.hidden = false; saving = false; marker.dragging.enable(); back.disabled = false; document.querySelector('#audit-locate').disabled = false; updateControls(); }
   });
   back.addEventListener('click', async () => {
+    placement.cancel();
     if (wizard.replaceLegacyRoute && wizard.originalLegacyLocation) {
       back.disabled = true;
       try {
@@ -1971,7 +2003,12 @@ function renderRouteLocationStep() {
     if (!state.activeMaps.includes(map) || saving || (!explicit && manual)) return;
     const latlng = [position.coords.latitude, position.coords.longitude]; marker.setLatLng(latlng); map.setView(latlng, map._walkAuditTileLayer.options.maxZoom || 19); select(marker.getLatLng());
   }
-  document.querySelector('#audit-locate').addEventListener('click', () => locateMap(map, position => usePosition(position, true)));
+  document.querySelector('#audit-locate').addEventListener('click', () => {
+    placement.cancel();
+    markManual();
+    const version = interactionVersion;
+    locateMap(map, position => usePosition(position, true), () => !saving && version === interactionVersion);
+  });
   select(marker.getLatLng());
   if (!initialSaved && navigator.geolocation) navigator.geolocation.getCurrentPosition(position => usePosition(position), () => {}, { enableHighAccuracy: true, timeout: 10000, maximumAge: 15000 });
   scheduleMapResize(map); pageReady();

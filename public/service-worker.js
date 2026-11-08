@@ -1,9 +1,10 @@
-const STATIC_CACHE = 'walk-audit-static-v6';
+const STATIC_CACHE = 'walk-audit-static-v7';
 const TILE_CACHE = 'walk-audit-tiles-v3';
 const STATIC_ASSETS = [
   '/',
   '/styles.css?v=3',
-  '/app.js?v=5',
+  '/app.js?v=7',
+  '/map-placement.js',
   '/favicon.svg',
   '/manifest.webmanifest',
   '/vendor/bulma/bulma.min.css',
